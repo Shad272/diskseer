@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/shad272/diskseer/internal/collect"
+	"github.com/shad272/diskseer/internal/elevate"
 	"github.com/shad272/diskseer/internal/report"
 	"github.com/shad272/diskseer/internal/rules"
 )
@@ -25,9 +26,12 @@ const version = "0.1.0"
 // os.Exit sparso nel mezzo del programma chiuderebbe la finestra proprio nel
 // caso in cui volevamo tenerla aperta.
 func main() {
-	codice := esegui()
+	codice, delegato := esegui()
 
-	if report.LanciatoDaEsploraRisorse() {
+	// Se il lavoro è passato a un processo elevato, questa finestra non ha
+	// più niente da mostrare: farla aspettare un INVIO lascerebbe l'utente
+	// davanti a due finestre, una delle quali chiede qualcosa senza motivo.
+	if !delegato && report.LanciatoDaEsploraRisorse() {
 		fmt.Fprint(os.Stderr, "\n  Premi INVIO per chiudere questa finestra... ")
 		bufio.NewReader(os.Stdin).ReadString('\n')
 	}
@@ -35,7 +39,9 @@ func main() {
 	os.Exit(codice)
 }
 
-func esegui() int {
+// esegui restituisce il codice di uscita e se il lavoro è stato affidato a un
+// altro processo.
+func esegui() (int, bool) {
 	var (
 		asJSON      = flag.Bool("json", false, "stampa i dati grezzi in JSON invece del referto")
 		noColor     = flag.Bool("no-color", false, "disattiva i colori ANSI")
@@ -44,20 +50,25 @@ func esegui() int {
 		tecnico     = flag.String("tecnico", "", "nome di chi esegue la diagnosi, stampato sul referto")
 		contatto    = flag.String("contatto", "", "recapito di chi esegue la diagnosi")
 		cliente     = flag.String("cliente", "", "nome del cliente, stampato sul referto")
+		noElevate   = flag.Bool("no-elevate", false, "non chiedere i privilegi di amministratore all'avvio")
 	)
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println("diskseer", version)
-		return 0
+		return 0, false
 	}
 
 	ansiOK := report.PrepareConsole()
 
+	if chiediPrivilegi(*noElevate, *asJSON) {
+		return 0, true
+	}
+
 	snap, err := collect.Collect()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "diskseer: raccolta dati fallita:", err)
-		return 3
+		return 3, false
 	}
 
 	if *asJSON {
@@ -65,9 +76,9 @@ func esegui() int {
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(snap); err != nil {
 			fmt.Fprintln(os.Stderr, "diskseer:", err)
-			return 3
+			return 3, false
 		}
-		return 0
+		return 0, false
 	}
 
 	findings := rules.Run(snap)
@@ -104,11 +115,11 @@ func esegui() int {
 	// diskseer su più macchine e raccogliere solo quelle che hanno problemi.
 	switch rules.Overall(findings) {
 	case rules.SevCritical:
-		return 2
+		return 2, false
 	case rules.SevWarn:
-		return 1
+		return 1, false
 	}
-	return 0
+	return 0, false
 }
 
 // percorsoRefertoPredefinito sceglie dove salvare il referto quando nessuno
@@ -131,4 +142,41 @@ func percorsoRefertoPredefinito() string {
 		return nome
 	}
 	return filepath.Join(filepath.Dir(exe), nome)
+}
+
+// chiediPrivilegi rilancia il programma come amministratore quando serve, e
+// dice se il lavoro è stato passato al nuovo processo.
+//
+// Le condizioni sono tre, e ognuna esclude un caso in cui l'elevazione
+// automatica farebbe danno:
+//
+//   - solo se non siamo già elevati, altrimenti si rilancerebbe all'infinito;
+//   - solo con doppio clic. Da un terminale il processo elevato aprirebbe una
+//     finestra tutta sua, e nel terminale d'origine non comparirebbe più
+//     nulla: output perso, codice di uscita perso, script rotti. Chi lavora
+//     da terminale sa già aprirlo come amministratore;
+//   - mai in modalità JSON, che serve agli script: una finestra di richiesta
+//     privilegi in mezzo a una raccolta automatica la blocca e basta.
+//
+// Se l'utente rifiuta la richiesta non si insiste e non ci si ferma: il
+// programma prosegue con quel che riesce a leggere e lo dichiara apertamente
+// nel referto. Una diagnosi parziale vale più di nessuna diagnosi, purché sia
+// dichiarata parziale.
+func chiediPrivilegi(disattivato, modalitaJSON bool) bool {
+	if disattivato || modalitaJSON {
+		return false
+	}
+	if elevate.Elevato() || !report.LanciatoDaEsploraRisorse() {
+		return false
+	}
+
+	eseguibile, err := os.Executable()
+	if err != nil {
+		return false
+	}
+
+	fmt.Println("\n  Richiesta dei privilegi di amministratore in corso...")
+	fmt.Println("  Servono per leggere lo stato di salute dei dischi SATA e USB.")
+
+	return elevate.Richiedi(eseguibile, os.Args[1:])
 }
