@@ -52,7 +52,7 @@ func (p Printer) sevColor(s rules.Severity) string {
 
 func (p Printer) Print(snap model.Snapshot, fs []rules.Finding) {
 	p.header(snap)
-	p.verdict(fs)
+	p.verdict(fs, snap.Elevated)
 	p.findings(fs)
 	p.inventory(snap)
 }
@@ -94,13 +94,24 @@ func Summary(fs []rules.Finding) string {
 	}
 }
 
-func (p Printer) verdict(fs []rules.Finding) {
+func (p Printer) verdict(fs []rules.Finding, elevato bool) {
 	overall := rules.Overall(fs)
 	msg := Summary(fs)
 
 	fmt.Fprintln(p.W)
 	fmt.Fprintf(p.W, "  %s\n", p.c(dim, strings.Repeat("─", wrapWidth)))
 	fmt.Fprintf(p.W, "  %s  %s\n", p.c(bold+p.sevColor(overall), "ESITO: "+overall.String()), msg)
+
+	// L'avvertenza sta dentro il riquadro dell'esito, non in fondo ai
+	// verdetti: è il punto che chiunque guarda per primo, e spesso l'unico
+	// che legge davvero. Un referto parziale scambiato per completo è peggio
+	// di nessun referto, perché dà una sicurezza che non c'è.
+	if !elevato {
+		fmt.Fprintf(p.W, "  %s  %s\n",
+			p.c(bold+yellow, "DIAGNOSI PARZIALE"),
+			"eseguita senza privilegi di amministratore")
+	}
+
 	fmt.Fprintf(p.W, "  %s\n", p.c(dim, strings.Repeat("─", wrapWidth)))
 }
 

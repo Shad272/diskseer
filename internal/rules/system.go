@@ -231,7 +231,7 @@ func ruleNotElevated(s model.Snapshot, b *builder) {
 
 	b.add(Finding{
 		Severity: SevInfo,
-		Area:     "Diagnosi",
+		Area:     areaDiagnosi,
 		Target:   "diskseer",
 		Title: fmt.Sprintf("Analisi parziale: %s non analizzabili senza privilegi",
 			pluralizeDischi(len(alBuio))),

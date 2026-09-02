@@ -42,13 +42,27 @@ var registry = []Rule{
 	ruleNotElevated,
 }
 
+// areaDiagnosi raccoglie i verdetti che parlano della diagnosi stessa invece
+// che della macchina.
+const areaDiagnosi = "Diagnosi"
+
 // Run applica tutte le regole e restituisce i verdetti dal più grave al meno.
 func Run(s model.Snapshot) []Finding {
 	b := &builder{}
 	for _, r := range registry {
 		r(s, b)
 	}
+	// I limiti della diagnosi vanno prima dei suoi risultati.
+	//
+	// L'avviso "analisi parziale" è marcato INFO perché non descrive un
+	// guasto, e ordinando per sola gravità finirebbe in fondo — letto per
+	// ultimo, quando chi legge si è già fatto un'idea sulla macchina. Ma
+	// sapere che mezzo controllo non è stato fatto cambia il peso di tutto
+	// ciò che viene dopo, e quindi va detto prima.
 	sort.SliceStable(b.out, func(i, j int) bool {
+		if diagnosi := b.out[i].Area == areaDiagnosi; diagnosi != (b.out[j].Area == areaDiagnosi) {
+			return diagnosi
+		}
 		return b.out[i].Severity > b.out[j].Severity
 	})
 	return b.out

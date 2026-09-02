@@ -46,3 +46,26 @@ func PrepareConsole() bool {
 	r, _, _ := procSetConsoleMode.Call(uintptr(h), uintptr(mode|enableVirtualTerminalProcessing))
 	return r != 0
 }
+
+var procGetConsoleProcessList = kernel32.NewProc("GetConsoleProcessList")
+
+// LanciatoDaEsploraRisorse dice se la finestra del terminale è stata creata
+// apposta per questo programma, cioè se l'utente ha fatto doppio clic
+// sull'eseguibile invece di scrivere il comando in un terminale già aperto.
+//
+// Serve a risolvere un problema che sembra un guasto e non lo è: un programma
+// da terminale avviato con doppio clic stampa il suo referto e finisce, e nel
+// momento in cui finisce la finestra creata per lui non ha più motivo di
+// esistere e si chiude. Il risultato appare per un decimo di secondo. Chi
+// guarda conclude che il programma non funziona.
+//
+// Il modo di accorgersene è contare quanti processi sono attaccati alla
+// console: se siamo soli, la console è nata con noi e morirà con noi. Se ce
+// n'è un altro, è la shell da cui siamo stati lanciati, e la finestra resterà
+// aperta anche dopo.
+func LanciatoDaEsploraRisorse() bool {
+	var pids [2]uint32
+	n, _, _ := procGetConsoleProcessList.Call(
+		uintptr(unsafe.Pointer(&pids[0])), uintptr(len(pids)))
+	return n == 1
+}
