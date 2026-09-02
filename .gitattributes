@@ -1,0 +1,13 @@
+# Windows usa due caratteri per andare a capo, Linux e macOS uno solo. Senza
+# queste righe git segnala una modifica su ogni file a ogni commit, anche
+# quando il contenuto non è cambiato di una virgola.
+* text=auto eol=lf
+
+# Gli script PowerShell restano con i fine-riga di Windows: alcune versioni
+# più vecchie non li eseguono correttamente altrimenti.
+*.ps1 text eol=crlf
+
+# I campioni di collaudo non vanno toccati: sono catture byte per byte di
+# macchine reali, e normalizzarli significherebbe alterare il materiale di
+# prova.
+testdata/*.json -text

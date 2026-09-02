@@ -1,0 +1,10 @@
+# Binari compilati
+diskseer
+diskseer.exe
+*.exe
+dist/
+
+# Referti generati durante le prove: contengono dati della macchina reale
+referto*.html
+admin-report.txt
+smart-probe.txt

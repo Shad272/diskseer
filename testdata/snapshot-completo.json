@@ -1,0 +1,479 @@
+{
+  "time": "2026-09-02T19:51:29.7094013+02:00",
+  "elevated": true,
+  "system": {
+    "manufacturer": "LENOVO",
+    "model": "90T100BAIX",
+    "os": "Microsoft Windows 11 Enterprise LTSC",
+    "osVersion": "10.0.26100",
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+    "cores": 6,
+    "threads": 12,
+    "ramBytes": 34136850432,
+    "chassis": "Desktop",
+    "lastBoot": "2026-08-31T22:31:27.448379Z"
+  },
+  "disks": [
+    {
+      "deviceId": "2",
+      "model": "ASMT 2115",
+      "mediaType": "Unspecified",
+      "busType": "USB",
+      "healthStatus": "Healthy",
+      "sizeBytes": 500107862016,
+      "isSystemDisk": false,
+      "temperatureC": 38,
+      "wearPercent": 0,
+      "powerOnHours": 122,
+      "readErrorsTotal": 0,
+      "readErrorsUncorrected": 0,
+      "smart": {
+        "attributes": [
+          {
+            "id": 1,
+            "name": "Tasso di errori in lettura",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 5,
+            "name": "Settori riallocati",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 9,
+            "name": "Ore di funzionamento",
+            "current": 100,
+            "worst": 100,
+            "raw": 122
+          },
+          {
+            "id": 12,
+            "name": "Cicli di accensione",
+            "current": 100,
+            "worst": 100,
+            "raw": 33
+          },
+          {
+            "id": 171,
+            "name": "Scritture fallite su cella",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 172,
+            "name": "Cancellazioni fallite su cella",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 173,
+            "name": "Livellamento dell'usura",
+            "current": 100,
+            "worst": 100,
+            "raw": 6
+          },
+          {
+            "id": 174,
+            "name": "Interruzioni di corrente impreviste",
+            "current": 100,
+            "worst": 100,
+            "raw": 32
+          },
+          {
+            "id": 180,
+            "name": "Blocchi di riserva ancora disponibili",
+            "current": 100,
+            "worst": 100,
+            "raw": 40
+          },
+          {
+            "id": 183,
+            "name": "Riduzioni di velocità del collegamento",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 184,
+            "name": "Errori end-to-end",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 187,
+            "name": "Errori non corretti riportati",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 194,
+            "name": "Temperatura",
+            "current": 62,
+            "worst": 53,
+            "raw": 201865035814
+          },
+          {
+            "id": 196,
+            "name": "Eventi di riallocazione",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 197,
+            "name": "Settori in attesa di rimappatura",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 198,
+            "name": "Settori illeggibili non rimappabili",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 199,
+            "name": "Errori di trasmissione sul cavo",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 202,
+            "name": "Attributo 202",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 206,
+            "name": "Attributo 206",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 210,
+            "name": "Attributo 210",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 246,
+            "name": "Settori totali scritti dal sistema",
+            "current": 100,
+            "worst": 100,
+            "raw": 1914988788
+          },
+          {
+            "id": 247,
+            "name": "Attributo 247",
+            "current": 100,
+            "worst": 100,
+            "raw": 59843399
+          },
+          {
+            "id": 248,
+            "name": "Attributo 248",
+            "current": 100,
+            "worst": 100,
+            "raw": 67434288
+          },
+          {
+            "id": 249,
+            "name": "Attributo 249",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 250,
+            "name": "Attributo 250",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 251,
+            "name": "Attributo 251",
+            "current": 100,
+            "worst": 100,
+            "raw": 1399583966
+          },
+          {
+            "id": 252,
+            "name": "Attributo 252",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 253,
+            "name": "Attributo 253",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          }
+        ]
+      }
+    },
+    {
+      "deviceId": "0",
+      "model": "TOSHIBA MQ01ABF050",
+      "mediaType": "HDD",
+      "busType": "SATA",
+      "healthStatus": "Healthy",
+      "sizeBytes": 500107862016,
+      "isSystemDisk": false,
+      "temperatureC": 30,
+      "powerOnHours": 1833,
+      "startStopCycles": 7022,
+      "readErrorsTotal": 0,
+      "readErrorsUncorrected": 0,
+      "smart": {
+        "attributes": [
+          {
+            "id": 1,
+            "name": "Tasso di errori in lettura",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 2,
+            "name": "Prestazioni di trasferimento",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 3,
+            "name": "Tempo di avvio della rotazione",
+            "current": 100,
+            "worst": 100,
+            "raw": 1460
+          },
+          {
+            "id": 4,
+            "name": "Cicli di avvio/arresto",
+            "current": 100,
+            "worst": 100,
+            "raw": 7022
+          },
+          {
+            "id": 5,
+            "name": "Settori riallocati",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 7,
+            "name": "Tasso di errori di posizionamento",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 8,
+            "name": "Prestazioni di posizionamento",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 9,
+            "name": "Ore di funzionamento",
+            "current": 96,
+            "worst": 96,
+            "raw": 1833
+          },
+          {
+            "id": 10,
+            "name": "Tentativi falliti di avvio rotazione",
+            "current": 239,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 12,
+            "name": "Cicli di accensione",
+            "current": 100,
+            "worst": 100,
+            "raw": 1314
+          },
+          {
+            "id": 191,
+            "name": "Urti rilevati",
+            "current": 100,
+            "worst": 100,
+            "raw": 1076
+          },
+          {
+            "id": 192,
+            "name": "Parcheggi di emergenza",
+            "current": 100,
+            "worst": 100,
+            "raw": 13
+          },
+          {
+            "id": 193,
+            "name": "Cicli di parcheggio testine",
+            "current": 99,
+            "worst": 99,
+            "raw": 15875
+          },
+          {
+            "id": 194,
+            "name": "Temperatura",
+            "current": 100,
+            "worst": 100,
+            "raw": 188979216414
+          },
+          {
+            "id": 196,
+            "name": "Eventi di riallocazione",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 197,
+            "name": "Settori in attesa di rimappatura",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 198,
+            "name": "Settori illeggibili non rimappabili",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 199,
+            "name": "Errori di trasmissione sul cavo",
+            "current": 200,
+            "worst": 200,
+            "raw": 1
+          },
+          {
+            "id": 220,
+            "name": "Spostamento dei piatti",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 222,
+            "name": "Ore con testine caricate",
+            "current": 98,
+            "worst": 98,
+            "raw": 831
+          },
+          {
+            "id": 223,
+            "name": "Tentativi ripetuti di caricamento testine",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 224,
+            "name": "Attrito di caricamento",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          },
+          {
+            "id": 226,
+            "name": "Tempo di caricamento",
+            "current": 100,
+            "worst": 100,
+            "raw": 183
+          },
+          {
+            "id": 240,
+            "name": "Ore di volo delle testine",
+            "current": 100,
+            "worst": 100,
+            "raw": 0
+          }
+        ]
+      }
+    },
+    {
+      "deviceId": "1",
+      "model": "WD PC SN740 SDDQNQD-512G-1001",
+      "mediaType": "SSD",
+      "busType": "NVMe",
+      "healthStatus": "Healthy",
+      "sizeBytes": 512110190592,
+      "isSystemDisk": true,
+      "temperatureC": 31,
+      "temperatureMaxC": 84,
+      "wearPercent": 0,
+      "powerOnHours": 1440,
+      "nvme": {
+        "criticalWarning": 0,
+        "compositeTempC": 31,
+        "availableSparePct": 100,
+        "availableSpareThresholdPct": 10,
+        "percentageUsedPct": 1,
+        "dataUnitsRead": 54508989,
+        "dataUnitsWritten": 33294257,
+        "powerCycles": 779,
+        "powerOnHours": 1440,
+        "unsafeShutdowns": 32,
+        "mediaErrors": 0,
+        "errorLogEntries": 0,
+        "warningTempTimeMinutes": 0,
+        "criticalTempTimeMinutes": 0
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "driveLetter": "C",
+      "fileSystem": "NTFS",
+      "healthStatus": "Healthy",
+      "operationalStatus": "OK",
+      "sizeBytes": 511090618368,
+      "freeBytes": 24912994304
+    },
+    {
+      "driveLetter": "E",
+      "fileSystem": "exFAT",
+      "healthStatus": "Warning",
+      "operationalStatus": "Full Repair Needed",
+      "sizeBytes": 498901975040,
+      "freeBytes": 140283478016
+    },
+    {
+      "driveLetter": "D",
+      "fileSystem": "NTFS",
+      "healthStatus": "Healthy",
+      "operationalStatus": "OK",
+      "sizeBytes": 499816329216,
+      "freeBytes": 74554466304
+    }
+  ],
+  "thermals": [
+    {
+      "name": "ACPI\\ThermalZone\\TZ00_0",
+      "celsius": 27.9
+    }
+  ]
+}

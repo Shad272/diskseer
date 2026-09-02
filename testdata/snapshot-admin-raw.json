@@ -1,0 +1,90 @@
+{
+  "time": "2026-09-02T14:55:40.4505162+02:00",
+  "elevated": true,
+  "system": {
+    "manufacturer": "LENOVO",
+    "model": "90T100BAIX",
+    "os": "Microsoft Windows 11 Enterprise LTSC",
+    "osVersion": "10.0.26100",
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+    "cores": 6,
+    "threads": 12,
+    "ramBytes": 34136850432,
+    "chassis": "Desktop",
+    "lastBoot": "2026-08-31T22:31:27.448379Z"
+  },
+  "disks": [
+    {
+      "deviceId": "2",
+      "model": "ASMT 2115",
+      "mediaType": "Unspecified",
+      "busType": "USB",
+      "healthStatus": "Healthy",
+      "sizeBytes": 500107862016,
+      "isSystemDisk": false,
+      "temperatureC": 43,
+      "temperatureMaxC": 0,
+      "wearPercent": 0,
+      "powerOnHours": 117,
+      "readErrorsTotal": 0,
+      "readErrorsUncorrected": 0
+    },
+    {
+      "deviceId": "0",
+      "model": "TOSHIBA MQ01ABF050",
+      "mediaType": "HDD",
+      "busType": "SATA",
+      "healthStatus": "Healthy",
+      "sizeBytes": 500107862016,
+      "isSystemDisk": false,
+      "temperatureC": 35,
+      "temperatureMaxC": 0,
+      "wearPercent": 0,
+      "powerOnHours": 1828,
+      "startStopCycles": 6982,
+      "readErrorsTotal": 0,
+      "readErrorsUncorrected": 0
+    },
+    {
+      "deviceId": "1",
+      "model": "WD PC SN740 SDDQNQD-512G-1001",
+      "mediaType": "SSD",
+      "busType": "NVMe",
+      "healthStatus": "Healthy",
+      "sizeBytes": 512110190592,
+      "isSystemDisk": true,
+      "temperatureC": 32,
+      "temperatureMaxC": 84,
+      "wearPercent": 0
+    }
+  ],
+  "volumes": [
+    {
+      "driveLetter": "C",
+      "fileSystem": "NTFS",
+      "healthStatus": "Healthy",
+      "sizeBytes": 511090618368,
+      "freeBytes": 2312949760
+    },
+    {
+      "driveLetter": "E",
+      "fileSystem": "exFAT",
+      "healthStatus": "Warning",
+      "sizeBytes": 498901975040,
+      "freeBytes": 147977011200
+    },
+    {
+      "driveLetter": "D",
+      "fileSystem": "NTFS",
+      "healthStatus": "Healthy",
+      "sizeBytes": 499816329216,
+      "freeBytes": 183024386048
+    }
+  ],
+  "thermals": [
+    {
+      "name": "ACPI\\ThermalZone\\TZ00_0",
+      "celsius": 27.9
+    }
+  ]
+}
