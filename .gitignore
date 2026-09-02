@@ -2,6 +2,10 @@
 diskseer
 diskseer.exe
 *.exe
+# Go lascia questo residuo quando l'eseguibile è in uso al momento della
+# compilazione: è un binario da diversi megabyte, e finito una volta nella
+# storia del repository non se ne va più.
+*.exe~
 dist/
 
 # Referti generati durante le prove: contengono dati della macchina reale

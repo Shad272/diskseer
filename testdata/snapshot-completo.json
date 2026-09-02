@@ -1,22 +1,22 @@
 {
-  "time": "2026-09-02T19:51:29.7094013+02:00",
+  "time": "0001-01-01T00:00:00Z",
   "elevated": true,
   "system": {
-    "manufacturer": "LENOVO",
-    "model": "90T100BAIX",
+    "manufacturer": "ANONIMO",
+    "model": "MACCHINA ANONIMA",
     "os": "Microsoft Windows 11 Enterprise LTSC",
     "osVersion": "10.0.26100",
-    "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+    "cpu": "CPU 6 core / 12 thread",
     "cores": 6,
     "threads": 12,
     "ramBytes": 34136850432,
     "chassis": "Desktop",
-    "lastBoot": "2026-08-31T22:31:27.448379Z"
+    "lastBoot": "0001-01-01T00:00:00Z"
   },
   "disks": [
     {
       "deviceId": "2",
-      "model": "ASMT 2115",
+      "model": "DISCO USB #2",
       "mediaType": "Unspecified",
       "busType": "USB",
       "healthStatus": "Healthy",
@@ -230,7 +230,7 @@
     },
     {
       "deviceId": "0",
-      "model": "TOSHIBA MQ01ABF050",
+      "model": "HDD SATA #0",
       "mediaType": "HDD",
       "busType": "SATA",
       "healthStatus": "Healthy",
@@ -416,7 +416,7 @@
     },
     {
       "deviceId": "1",
-      "model": "WD PC SN740 SDDQNQD-512G-1001",
+      "model": "SSD NVMe #1",
       "mediaType": "SSD",
       "busType": "NVMe",
       "healthStatus": "Healthy",
@@ -472,7 +472,7 @@
   ],
   "thermals": [
     {
-      "name": "ACPI\\ThermalZone\\TZ00_0",
+      "name": "ZONA TERMICA 1",
       "celsius": 27.9
     }
   ]

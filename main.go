@@ -51,6 +51,7 @@ func esegui() (int, bool) {
 		contatto    = flag.String("contatto", "", "recapito di chi esegue la diagnosi")
 		cliente     = flag.String("cliente", "", "nome del cliente, stampato sul referto")
 		noElevate   = flag.Bool("no-elevate", false, "non chiedere i privilegi di amministratore all'avvio")
+		anonimo     = flag.Bool("anonimo", false, "rimuove marca, modello e orari della macchina dai dati")
 	)
 	flag.Parse()
 
@@ -69,6 +70,13 @@ func esegui() (int, bool) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "diskseer: raccolta dati fallita:", err)
 		return 3, false
+	}
+
+	// L'anonimizzazione va fatta subito dopo la raccolta, prima che i dati
+	// vengano usati da qualunque cosa: così nessun percorso del programma può
+	// far uscire un dato identificativo per distrazione.
+	if *anonimo {
+		snap.Anonimizza()
 	}
 
 	if *asJSON {

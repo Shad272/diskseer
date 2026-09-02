@@ -371,7 +371,7 @@ func TestRegoleSMART(t *testing.T) {
 	})
 }
 
-// Campione reale di un disco SATA sano (TOSHIBA MQ01ABF050, 1833 ore).
+// Campione reale di un disco SATA sano (un disco meccanico SATA con 1833 ore).
 // Serve soprattutto a bloccare i falsi positivi: su una macchina senza guasti
 // il programma deve tacere, ed è la proprietà più facile da perdere man mano
 // che si aggiungono regole.

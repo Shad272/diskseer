@@ -15,10 +15,15 @@
          avere il disco guasto sottomano.
 
 .EXAMPLE
-    .\tools\capture.ps1 -Name toshiba-settori-riallocati
+    .\tools\capture.ps1 -Name hdd-settori-riallocati
 #>
 param(
-    [string]$Name = 'snapshot'
+    [string]$Name = 'snapshot',
+    # I campioni catturati in assistenza contengono marca, modello e orari di
+    # accensione del computer di un cliente. Sono suoi, non tuoi, e non
+    # servono a diagnosticare niente: per questo l'anonimizzazione e' attiva
+    # di default e va disattivata di proposito, non ricordata di proposito.
+    [switch]$ConDatiIdentificativi
 )
 
 $ErrorActionPreference = 'Stop'
@@ -39,8 +44,11 @@ if (-not $elevated) {
     Write-Warning 'Non elevato: SMART, temperature e usura NON finiranno nello snapshot.'
 }
 
-$out  = Join-Path $dir "$Name.json"
-$json = & $exe --json | Out-String
+$out = Join-Path $dir "$Name.json"
+
+$opzioni = @('--json')
+if (-not $ConDatiIdentificativi) { $opzioni += '--anonimo' }
+$json = & $exe @opzioni | Out-String
 
 # WriteAllText scrive UTF-8 senza BOM. Out-File e '>' aggiungono il BOM, e
 # tre byte invisibili in testa fanno fallire json.Unmarshal in Go con un
@@ -48,7 +56,8 @@ $json = & $exe --json | Out-String
 [IO.File]::WriteAllText($out, $json)
 
 Write-Host ""
-Write-Host "Scritto $out ($((Get-Item $out).Length) byte, elevato=$elevated)" -ForegroundColor Green
+$anon = if ($ConDatiIdentificativi) { 'NO' } else { 'si' }
+Write-Host "Scritto $out ($((Get-Item $out).Length) byte, elevato=$elevated, anonimizzato=$anon)" -ForegroundColor Green
 Write-Host ""
 Write-Host "Premi INVIO per chiudere"
 [void][Console]::ReadLine()

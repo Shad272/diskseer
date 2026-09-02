@@ -26,7 +26,7 @@ func scriviAttributo(b []byte, off int, id byte, current, worst byte, raw uint64
 // identificativo, flag e valori normalizzati. Non produceva alcun errore —
 // produceva numeri enormi e plausibili come "431174464261 settori riallocati".
 //
-// I valori qui sotto vengono da un disco reale (TOSHIBA MQ01ABF050): 1832 ore
+// I valori qui sotto vengono da un disco reale reale: 1832 ore
 // di funzionamento, un errore di trasmissione sul cavo, nessun settore
 // riallocato.
 func TestParseSMARTLeggeIlConteggioGrezzoDalByteGiusto(t *testing.T) {

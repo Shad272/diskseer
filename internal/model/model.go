@@ -6,7 +6,10 @@
 // sappiamo. Confonderli è il modo più rapido per dare una diagnosi falsa.
 package model
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Snapshot struct {
 	Time     time.Time `json:"time"`
@@ -228,3 +231,49 @@ const (
 	SMARTOfflineUncorrect   = 198 // settori illeggibili e non rimappabili
 	SMARTCRCErrors          = 199 // errori di trasmissione sul cavo
 )
+
+// Anonimizza sostituisce i dati che identificano una macchina, lasciando
+// intatto tutto ciò che serve alla diagnosi.
+//
+// Serve per condividere un caso senza condividere il cliente. Un campione
+// catturato in assistenza contiene marca, modello, processore e orari di
+// accensione del computer di qualcun altro: sono suoi, non tuoi, e non hanno
+// niente a che fare con il guasto che si sta studiando.
+//
+// Cosa resta: ore di funzionamento, settori difettosi, temperature, errori,
+// spazio sui volumi. Cioè tutto quello su cui le regole ragionano. Un campione
+// anonimizzato produce esattamente gli stessi verdetti dell'originale — se
+// così non fosse, vorrebbe dire che le regole stanno guardando la cosa
+// sbagliata.
+//
+// L'orario viene azzerato anche per un secondo motivo: un campione senza
+// orario produce sempre lo stesso risultato, e un materiale di collaudo che
+// cambia da solo col passare del tempo non serve a collaudare niente.
+func (s *Snapshot) Anonimizza() {
+	s.Time = time.Time{}
+
+	s.System.Manufacturer = "ANONIMO"
+	s.System.Model = "MACCHINA ANONIMA"
+	s.System.CPU = fmt.Sprintf("CPU %d core / %d thread", s.System.Cores, s.System.Threads)
+	s.System.LastBoot = time.Time{}
+
+	for i := range s.Disks {
+		d := &s.Disks[i]
+		tipo := d.MediaType
+		if tipo == "" || tipo == "Unspecified" {
+			tipo = "DISCO"
+		}
+		bus := d.BusType
+		if bus == "" {
+			bus = "?"
+		}
+		d.Model = fmt.Sprintf("%s %s #%s", tipo, bus, d.DeviceID)
+	}
+
+	if s.Battery != nil {
+		s.Battery.Name = "BATTERIA"
+	}
+	for i := range s.Thermals {
+		s.Thermals[i].Name = fmt.Sprintf("ZONA TERMICA %d", i+1)
+	}
+}

@@ -49,6 +49,9 @@ diskseer              # full report
 diskseer --json       # raw data, for scripting or archiving
 diskseer --no-color   # plain text
 
+# Strip machine identity before sharing a capture
+diskseer --json --anonimo > case.json
+
 # Client-ready report as a self-contained HTML page
 diskseer --html report.html \
       --tecnico "Your Name" --contatto "you@example.com" --cliente "Customer"
@@ -168,8 +171,9 @@ Counter availability by bus, measured on real hardware:
 | Throttling time | — | yes | — |
 
 All three paths read the drive itself rather than Windows' interpretation of
-it. Verified on real hardware: a Toshiba MQ01ABF050 over SATA, a WD SN740 over
-NVMe, and a SATA SSD behind an ASMedia ASM2115 bridge.
+it, and all three are verified against real hardware: a 5400rpm mechanical
+drive over SATA, a consumer NVMe SSD, and a SATA SSD behind an ASMedia USB
+bridge.
 
 USB support depends on the bridge implementing SCSI-ATA translation. Many
 cheap enclosures do not, and some accept the command and return a block of
@@ -187,6 +191,17 @@ to distinguish that from a real zero. `internal/collect.Normalize` throws away
 the cases where a zero is provably meaningless (wear on a mechanical drive, a
 peak temperature of 0 °C) and leaves the rest alone. Guessing further would be
 worse than admitting the gap.
+
+## Test data
+
+The snapshots in `testdata/` are real captures, run through `--anonimo`:
+manufacturer, model, CPU and drive names are replaced and timestamps zeroed,
+while every measurement is left untouched. `tools/capture.ps1` anonymises by
+default — captures taken on a customer's machine describe their computer, not
+the fault being studied, and that data has no business in a repository.
+
+The whole suite runs against those anonymised fixtures and passes, which is
+the practical proof that anonymising changes no measurement.
 
 ## Status
 
