@@ -318,4 +318,11 @@ thresholds only get better when they meet hardware that actually broke.
 
 ## License
 
-MIT
+[GNU General Public License v3.0](LICENSE).
+
+In short: use it however you like, including commercially and in a repair shop.
+If you distribute it — modified, or bundled inside another program — you have
+to publish the source of what you distribute, under the same licence.
+
+Running the tool on customers' machines carries no obligation whatsoever. The
+copyleft only applies to distributing code.
