@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shad272/diskseer/internal/i18n"
 	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/rules"
 )
@@ -20,9 +21,9 @@ var htmlTemplate string
 // fatto la diagnosi e per chi. Senza questi il referto resta un file tecnico;
 // con questi diventa un documento che si consegna.
 type HTMLOptions struct {
-	Tecnico  string
-	Contatto string
-	Cliente  string
+	Technician string
+	Contact    string
+	Customer   string
 }
 
 // Il template riceve solo stringhe gia' pronte. Tutta la logica — conversioni,
@@ -32,6 +33,7 @@ type HTMLOptions struct {
 type htmlView struct {
 	Version   string
 	Data      string
+	T         etichette
 	Opts      HTMLOptions
 	Sys       model.System
 	RAM       string
@@ -86,6 +88,64 @@ func gb(b uint64) string { return fmt.Sprintf("%.1f GB", float64(b)/gigabyte) }
 // doppio clic sul PC di un cliente che magari non ha internet, e stamparsi
 // senza sorprese.
 func WriteHTML(path string, snap model.Snapshot, fs []rules.Finding, opts HTMLOptions) error {
+	return WriteHTMLLang(path, i18n.EN, snap, fs, opts)
+}
+
+// etichette raccoglie i testi fissi del referto HTML. Stanno qui e non nel
+// template perché un template pieno di condizioni sulla lingua diventa
+// illeggibile, e perché la logica in Go si può collaudare.
+type etichette struct {
+	Titolo, Sottotitolo, Esito, Rilevato       string
+	Dischi, Volumi, Generato                   string
+	ColTipo, ColModello, ColCapacita, ColBus   string
+	ColStato, ColTemp, ColVita, ColScritti     string
+	ColUnita, ColFS, ColLibero, ColPerc        string
+	Produttore, Modello, Tipo, Processore      string
+	CoreThread, Memoria, SistemaOperativo, Ver string
+	Sistema, CosaFare, NotaTitolo, NotaTesto   string
+	Cliente                                    string
+}
+
+func etichetteDi(l i18n.Lingua) etichette {
+	return etichette{
+		Titolo:           l.S("Diagnostic report", "Referto diagnostico"),
+		Sottotitolo:      l.S("Analysis performed on", "Analisi eseguita il"),
+		Cliente:          l.S("Customer", "Cliente"),
+		Esito:            l.S("OVERALL RESULT", "ESITO COMPLESSIVO"),
+		Rilevato:         l.S("What was found", "Cosa è stato rilevato"),
+		Dischi:           l.S("Installed drives", "Dischi installati"),
+		Volumi:           l.S("Volumes", "Volumi"),
+		Generato:         l.S("Report generated with diskseer", "Referto generato con diskseer"),
+		CosaFare:         l.S("What to do", "Cosa fare"),
+		ColTipo:          l.S("Type", "Tipo"),
+		ColModello:       l.S("Model", "Modello"),
+		ColCapacita:      l.S("Capacity", "Capacità"),
+		ColBus:           l.S("Connection", "Collegamento"),
+		ColStato:         l.S("Status", "Stato"),
+		ColTemp:          l.S("Temp.", "Temp."),
+		ColVita:          l.S("Life used", "Vita usata"),
+		ColScritti:       l.S("Written", "Scritti"),
+		ColUnita:         l.S("Drive", "Unità"),
+		ColFS:            l.S("File system", "File system"),
+		ColLibero:        l.S("Free space", "Spazio libero"),
+		ColPerc:          "%",
+		Produttore:       l.S("Manufacturer", "Produttore"),
+		Modello:          l.S("Model", "Modello"),
+		Tipo:             l.S("Form factor", "Tipo"),
+		Processore:       l.S("Processor", "Processore"),
+		CoreThread:       l.S("Cores / threads", "Core / thread"),
+		Memoria:          l.S("Memory", "Memoria"),
+		SistemaOperativo: l.S("Operating system", "Sistema operativo"),
+		Ver:              l.S("Version", "Versione"),
+		Sistema:          l.S("SYSTEM", "SISTEMA"),
+		NotaTitolo:       l.S("Partial analysis.", "Analisi parziale."),
+		NotaTesto: l.S(
+			"This check ran without administrator privileges: the internal health of the drives (S.M.A.R.T.), temperatures and wear levels were not accessible. A drive close to failure may have gone undetected.",
+			"Il controllo è stato eseguito senza privilegi di amministratore: lo stato di salute interno dei dischi (SMART), le temperature e i livelli di usura non erano accessibili. Un disco prossimo al guasto potrebbe non essere stato rilevato."),
+	}
+}
+
+func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Finding, opts HTMLOptions) error {
 	tmpl, err := template.New("referto").Parse(htmlTemplate)
 	if err != nil {
 		return fmt.Errorf("template non valido: %w", err)
@@ -93,20 +153,21 @@ func WriteHTML(path string, snap model.Snapshot, fs []rules.Finding, opts HTMLOp
 
 	overall := rules.Overall(fs)
 	view := htmlView{
-		Version:   "0.1.0",
-		Data:      time.Now().Format("02/01/2006 alle 15:04"),
+		Version:   "1.0.0",
+		Data:      time.Now().Format(l.S("2006-01-02 at 15:04", "02/01/2006 alle 15:04")),
+		T:         etichetteDi(l),
 		Opts:      opts,
 		Sys:       snap.System,
 		RAM:       fmt.Sprintf("%.0f GB", float64(snap.System.RAMBytes)/gigabyte),
-		Esito:     overall.String(),
+		Esito:     overall.Label(l),
 		EsitoCSS:  overall.Slug(),
-		Riepilogo: Summary(fs),
+		Riepilogo: Summary(l, fs),
 		Elevated:  snap.Elevated,
 	}
 
 	for _, f := range fs {
 		view.Findings = append(view.Findings, htmlFinding{
-			Severita:  f.Severity.String(),
+			Severita:  f.Severity.Label(l),
 			CSS:       f.Severity.Slug(),
 			Area:      f.Area,
 			Target:    f.Target,
@@ -120,7 +181,7 @@ func WriteHTML(path string, snap model.Snapshot, fs []rules.Finding, opts HTMLOp
 	for _, d := range snap.Disks {
 		tipo := d.MediaType
 		if tipo == "" || tipo == "Unspecified" {
-			tipo = "sconosciuto"
+			tipo = l.S("unknown", "sconosciuto")
 		}
 		vita, scritti := "—", "—"
 		if d.NVMe != nil {

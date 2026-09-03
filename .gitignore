@@ -9,6 +9,7 @@ diskseer.exe
 dist/
 
 # Referti generati durante le prove: contengono dati della macchina reale
+diskseer-report*.html
 referto*.html
 admin-report.txt
 smart-probe.txt

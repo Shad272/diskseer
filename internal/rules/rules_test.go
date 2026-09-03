@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/shad272/diskseer/internal/collect"
+	"github.com/shad272/diskseer/internal/i18n"
 	"github.com/shad272/diskseer/internal/model"
 )
 
@@ -14,6 +15,11 @@ import (
 // E' cio' che permette di collaudarlo su macchine che non abbiamo sottomano.
 // Ogni volta che un cliente porta un guasto vero, il suo snapshot entra qui e
 // il caso non potra' piu' tornare a passare inosservato.
+// esegui applica le regole in italiano. I test asseriscono su frasi italiane,
+// quindi passando IT collaudano anche il percorso di traduzione invece di
+// limitarsi a inseguire la lingua predefinita.
+func esegui(s model.Snapshot) []Finding { return Run(s, i18n.IT) }
+
 func loadSnapshot(t *testing.T, path string) model.Snapshot {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -39,7 +45,7 @@ func findByTitle(fs []Finding, substr string) *Finding {
 
 func TestSnapshotReale(t *testing.T) {
 	s := loadSnapshot(t, "../../testdata/snapshot-admin-raw.json")
-	fs := Run(s)
+	fs := esegui(s)
 
 	t.Run("spazio esaurito su C e' critico", func(t *testing.T) {
 		f := findByTitle(fs, "2.2 GB liberi")
@@ -125,7 +131,7 @@ func TestDatoAssenteNonEZero(t *testing.T) {
 					ReadErrorsUncorr: tc.uncorrected,
 				}},
 			}
-			f := findByTitle(Run(s), "non è riuscito a correggere")
+			f := findByTitle(esegui(s), "non è riuscito a correggere")
 			if tc.vuoleAllarm && f == nil {
 				t.Error("errori non corretti presenti ma nessun allarme")
 			}
@@ -165,7 +171,7 @@ func TestStatoOperativoDetermina1Intervento(t *testing.T) {
 					FreeBytes:         900,
 				}},
 			}
-			fs := Run(s)
+			fs := esegui(s)
 			f := findByTitle(fs, "File system exFAT")
 			if f == nil {
 				t.Fatal("nessun verdetto sul volume")
@@ -195,7 +201,7 @@ func TestSenzaElevazioneNominaISoliDischiAlBuio(t *testing.T) {
 				NVMe: &model.NVMeHealth{PercentageUsedPct: 1, PowerOnHours: 1000}},
 		},
 	}
-	f := findByTitle(Run(s), "Analisi parziale")
+	f := findByTitle(esegui(s), "Analisi parziale")
 	if f == nil {
 		t.Fatal("con un disco non leggibile l'avviso deve comparire")
 	}
@@ -221,7 +227,7 @@ func TestSenzaElevazioneMaTuttoLettoNessunAvviso(t *testing.T) {
 				NVMe: &model.NVMeHealth{PercentageUsedPct: 1, PowerOnHours: 1000}},
 		},
 	}
-	if f := findByTitle(Run(s), "Analisi parziale"); f != nil {
+	if f := findByTitle(esegui(s), "Analisi parziale"); f != nil {
 		t.Errorf("nessun disco è al buio, l'avviso non deve comparire: %q", f.Title)
 	}
 }
@@ -237,20 +243,20 @@ func TestRegoleNVMe(t *testing.T) {
 	}
 
 	t.Run("errori di integrità sono critici", func(t *testing.T) {
-		f := findByTitle(Run(base(model.NVMeHealth{MediaErrors: 4})), "errori di integrità")
+		f := findByTitle(esegui(base(model.NVMeHealth{MediaErrors: 4})), "errori di integrità")
 		if f == nil || f.Severity != SevCritical {
 			t.Fatalf("atteso CRITICO, ottenuto %v", f)
 		}
 	})
 
 	t.Run("zero errori non allarma", func(t *testing.T) {
-		if f := findByTitle(Run(base(model.NVMeHealth{MediaErrors: 0})), "errori di integrità"); f != nil {
+		if f := findByTitle(esegui(base(model.NVMeHealth{MediaErrors: 0})), "errori di integrità"); f != nil {
 			t.Error("falso positivo su un disco sano")
 		}
 	})
 
 	t.Run("sola lettura è irreversibile", func(t *testing.T) {
-		f := findByTitle(Run(base(model.NVMeHealth{CriticalWarning: 0x08})), "sola lettura")
+		f := findByTitle(esegui(base(model.NVMeHealth{CriticalWarning: 0x08})), "sola lettura")
 		if f == nil || f.Severity != SevCritical {
 			t.Fatalf("atteso CRITICO, ottenuto %v", f)
 		}
@@ -259,21 +265,21 @@ func TestRegoleNVMe(t *testing.T) {
 	// Il punto della proiezione: la stessa percentuale consumata significa
 	// cose opposte a seconda di quanto tempo ci è voluto.
 	t.Run("consumo lento non allarma", func(t *testing.T) {
-		f := findByTitle(Run(base(model.NVMeHealth{PercentageUsedPct: 1, PowerOnHours: 1437})), "Vita residua")
+		f := findByTitle(esegui(base(model.NVMeHealth{PercentageUsedPct: 1, PowerOnHours: 1437})), "Vita residua")
 		if f != nil {
 			t.Errorf("1%% in 1437 ore proietta decenni: %q", f.Title)
 		}
 	})
 
 	t.Run("consumo rapido allarma", func(t *testing.T) {
-		f := findByTitle(Run(base(model.NVMeHealth{PercentageUsedPct: 60, PowerOnHours: 6000})), "Vita residua")
+		f := findByTitle(esegui(base(model.NVMeHealth{PercentageUsedPct: 60, PowerOnHours: 6000})), "Vita residua")
 		if f == nil || f.Severity != SevWarn {
 			t.Fatalf("60%% in 6000 ore lascia meno di un anno: atteso ATTENZIONE, ottenuto %v", f)
 		}
 	})
 
 	t.Run("minuti sopra soglia termica sono una prova", func(t *testing.T) {
-		f := findByTitle(Run(base(model.NVMeHealth{WarningTempTimeMin: 45})), "sopra la soglia")
+		f := findByTitle(esegui(base(model.NVMeHealth{WarningTempTimeMin: 45})), "sopra la soglia")
 		if f == nil || f.Severity != SevWarn {
 			t.Fatalf("atteso ATTENZIONE, ottenuto %v", f)
 		}
@@ -286,7 +292,7 @@ func TestRegoleNVMe(t *testing.T) {
 			HealthStatus: "Warning", OperationalStatus: "Full Repair Needed",
 			SizeBytes: 1000, FreeBytes: 900,
 		}}
-		f := findByTitle(Run(s), "spegnimenti anomali")
+		f := findByTitle(esegui(s), "spegnimenti anomali")
 		if f == nil {
 			t.Fatal("15 spegnimenti su 100 devono produrre un verdetto")
 		}
@@ -313,21 +319,21 @@ func TestRegoleSMART(t *testing.T) {
 	}
 
 	t.Run("settori in attesa sono critici", func(t *testing.T) {
-		f := findByTitle(Run(disco(attr(197, 8))), "in attesa di rimappatura")
+		f := findByTitle(esegui(disco(attr(197, 8))), "in attesa di rimappatura")
 		if f == nil || f.Severity != SevCritical {
 			t.Fatalf("atteso CRITICO, ottenuto %v", f)
 		}
 	})
 
 	t.Run("pochi settori riallocati avvisano senza allarmare", func(t *testing.T) {
-		f := findByTitle(Run(disco(attr(5, 3))), "settori riallocati")
+		f := findByTitle(esegui(disco(attr(5, 3))), "settori riallocati")
 		if f == nil || f.Severity != SevWarn {
 			t.Fatalf("atteso ATTENZIONE, ottenuto %v", f)
 		}
 	})
 
 	t.Run("molti settori riallocati diventano critici", func(t *testing.T) {
-		f := findByTitle(Run(disco(attr(5, 120))), "settori riallocati")
+		f := findByTitle(esegui(disco(attr(5, 120))), "settori riallocati")
 		if f == nil || f.Severity != SevCritical {
 			t.Fatalf("atteso CRITICO, ottenuto %v", f)
 		}
@@ -335,7 +341,7 @@ func TestRegoleSMART(t *testing.T) {
 
 	// La regola che fa risparmiare un disco: il colpevole è il cavo.
 	t.Run("errori CRC accusano il cavo non il disco", func(t *testing.T) {
-		f := findByTitle(Run(disco(attr(199, 14))), "errori di trasmissione")
+		f := findByTitle(esegui(disco(attr(199, 14))), "errori di trasmissione")
 		if f == nil {
 			t.Fatal("nessun verdetto sugli errori di trasmissione")
 		}
@@ -348,7 +354,7 @@ func TestRegoleSMART(t *testing.T) {
 	})
 
 	t.Run("zero errori non produce verdetti", func(t *testing.T) {
-		fs := Run(disco(attr(5, 0), attr(197, 0), attr(199, 0)))
+		fs := esegui(disco(attr(5, 0), attr(197, 0), attr(199, 0)))
 		for _, f := range fs {
 			if f.Area == "Disco" || f.Area == "Collegamento" {
 				t.Errorf("falso positivo su un disco sano: %q", f.Title)
@@ -362,10 +368,10 @@ func TestRegoleSMART(t *testing.T) {
 		s := disco(attr(197, 4))
 		n := uint64(9)
 		s.Disks[0].ReadErrorsUncorr = &n
-		if f := findByTitle(Run(s), "non è riuscito a correggere"); f != nil {
+		if f := findByTitle(esegui(s), "non è riuscito a correggere"); f != nil {
 			t.Errorf("verdetto duplicato dai contatori Windows: %q", f.Title)
 		}
-		if f := findByTitle(Run(s), "in attesa di rimappatura"); f == nil {
+		if f := findByTitle(esegui(s), "in attesa di rimappatura"); f == nil {
 			t.Error("il verdetto SMART, più preciso, deve restare")
 		}
 	})
@@ -377,7 +383,7 @@ func TestRegoleSMART(t *testing.T) {
 // che si aggiungono regole.
 func TestSnapshotSATAReale(t *testing.T) {
 	s := loadSnapshot(t, "../../testdata/snapshot-smart.json")
-	fs := Run(s)
+	fs := esegui(s)
 
 	t.Run("nessun falso allarme sulla superficie", func(t *testing.T) {
 		for _, titolo := range []string{
@@ -448,7 +454,7 @@ func TestInterruzioniDiCorrenteDipendonoDalCollegamento(t *testing.T) {
 	}
 
 	t.Run("disco esterno: rimozione sicura", func(t *testing.T) {
-		f := findByTitle(Run(disco("USB")), "interruzioni di corrente")
+		f := findByTitle(esegui(disco("USB")), "interruzioni di corrente")
 		if f == nil {
 			t.Fatal("32 interruzioni su 33 accensioni devono produrre un verdetto")
 		}
@@ -458,7 +464,7 @@ func TestInterruzioniDiCorrenteDipendonoDalCollegamento(t *testing.T) {
 	})
 
 	t.Run("disco interno: alimentazione", func(t *testing.T) {
-		f := findByTitle(Run(disco("SATA")), "interruzioni di corrente")
+		f := findByTitle(esegui(disco("SATA")), "interruzioni di corrente")
 		if f == nil {
 			t.Fatal("verdetto mancante sul disco interno")
 		}
@@ -473,7 +479,7 @@ func TestInterruzioniDiCorrenteDipendonoDalCollegamento(t *testing.T) {
 	t.Run("poche interruzioni non allarmano", func(t *testing.T) {
 		s := disco("USB")
 		s.Disks[0].SMART.Attributes = []model.SMARTAttribute{{ID: 174, Raw: 1}, {ID: 12, Raw: 500}}
-		if f := findByTitle(Run(s), "interruzioni di corrente"); f != nil {
+		if f := findByTitle(esegui(s), "interruzioni di corrente"); f != nil {
 			t.Errorf("falso positivo: %q", f.Title)
 		}
 	})
@@ -485,7 +491,7 @@ func TestInterruzioniDiCorrenteDipendonoDalCollegamento(t *testing.T) {
 // piedi, che i numeri siano accordati e che ogni verdetto dica cosa fare.
 func TestSnapshotCompleto(t *testing.T) {
 	s := loadSnapshot(t, "../../testdata/snapshot-completo.json")
-	fs := Run(s)
+	fs := esegui(s)
 
 	t.Run("tutti e tre i dischi sono stati letti", func(t *testing.T) {
 		for _, d := range s.Disks {

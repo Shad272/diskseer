@@ -1,7 +1,7 @@
 // Package report trasforma i verdetti in qualcosa che una persona legge.
 //
-// È la metà del valore del programma. La diagnosi più accurata del mondo
-// non serve se chi la riceve non capisce cosa deve fare.
+// È la metà del valore del programma. La diagnosi più accurata del mondo non
+// serve se chi la riceve non capisce cosa deve fare.
 package report
 
 import (
@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/shad272/diskseer/internal/i18n"
 	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/rules"
 )
@@ -28,6 +29,7 @@ const wrapWidth = 74
 type Printer struct {
 	W     io.Writer
 	Color bool
+	Lang  i18n.Lingua
 }
 
 func (p Printer) c(code, s string) string {
@@ -59,19 +61,22 @@ func (p Printer) Print(snap model.Snapshot, fs []rules.Finding) {
 
 func (p Printer) header(s model.Snapshot) {
 	sys := s.System
+	l := p.Lang
 	fmt.Fprintln(p.W)
-	fmt.Fprintf(p.W, "  %s  %s\n", p.c(bold, "diskseer"), p.c(dim, s.Time.Format("02/01/2006 15:04")))
+	fmt.Fprintf(p.W, "  %s  %s\n", p.c(bold, "diskseer"),
+		p.c(dim, s.Time.Format(l.S("2006-01-02 15:04", "02/01/2006 15:04"))))
 	fmt.Fprintln(p.W)
 	fmt.Fprintf(p.W, "  %s %s · %s\n", sys.Manufacturer, sys.Model, sys.Chassis)
-	fmt.Fprintf(p.W, "  %s · %d core / %d thread · %.1f GB RAM\n",
-		sys.CPU, sys.Cores, sys.Threads, float64(sys.RAMBytes)/(1024*1024*1024))
+	fmt.Fprintf(p.W, "  %s · %s\n", sys.CPU,
+		l.F("%d cores / %d threads · %.1f GB RAM", "%d core / %d thread · %.1f GB RAM",
+			sys.Cores, sys.Threads, float64(sys.RAMBytes)/(1024*1024*1024)))
 	fmt.Fprintf(p.W, "  %s (%s)\n", sys.OS, sys.OSVersion)
 }
 
-// Summary condensa l'esito in una frase. Vive qui, in un punto solo, perché
-// la usano sia il referto a schermo sia quello HTML: due copie della stessa
-// frase diventano due frasi diverse alla prima modifica.
-func Summary(fs []rules.Finding) string {
+// Summary condensa l'esito in una frase. Vive qui, in un punto solo, perché la
+// usano sia il referto a schermo sia quello HTML: due copie della stessa frase
+// diventano due frasi diverse alla prima modifica.
+func Summary(l i18n.Lingua, fs []rules.Finding) string {
 	var crit, warn int
 	for _, f := range fs {
 		switch f.Severity {
@@ -81,35 +86,43 @@ func Summary(fs []rules.Finding) string {
 			warn++
 		}
 	}
+
+	gravi := l.N(uint64(crit), "serious problem", "serious problems",
+		"problema grave", "problemi gravi")
+	occhio := l.N(uint64(warn), "thing to keep an eye on", "things to keep an eye on",
+		"cosa da tenere d'occhio", "cose da tenere d'occhio")
+
 	switch {
 	case crit > 0 && warn > 0:
-		return pluralize(crit, "problema grave", "problemi gravi") + ", " +
-			pluralize(warn, "cosa da tenere d'occhio", "cose da tenere d'occhio")
+		return gravi + ", " + occhio
 	case crit > 0:
-		return pluralize(crit, "problema grave", "problemi gravi")
+		return gravi
 	case warn > 0:
-		return pluralize(warn, "cosa da tenere d'occhio", "cose da tenere d'occhio")
+		return occhio
 	default:
-		return "nessun problema rilevato"
+		return l.S("no problems found", "nessun problema rilevato")
 	}
 }
 
 func (p Printer) verdict(fs []rules.Finding, elevato bool) {
+	l := p.Lang
 	overall := rules.Overall(fs)
-	msg := Summary(fs)
 
 	fmt.Fprintln(p.W)
 	fmt.Fprintf(p.W, "  %s\n", p.c(dim, strings.Repeat("─", wrapWidth)))
-	fmt.Fprintf(p.W, "  %s  %s\n", p.c(bold+p.sevColor(overall), "ESITO: "+overall.String()), msg)
+	fmt.Fprintf(p.W, "  %s  %s\n",
+		p.c(bold+p.sevColor(overall), l.S("RESULT: ", "ESITO: ")+overall.Label(l)),
+		Summary(l, fs))
 
-	// L'avvertenza sta dentro il riquadro dell'esito, non in fondo ai
-	// verdetti: è il punto che chiunque guarda per primo, e spesso l'unico
-	// che legge davvero. Un referto parziale scambiato per completo è peggio
-	// di nessun referto, perché dà una sicurezza che non c'è.
+	// L'avvertenza sta dentro il riquadro dell'esito, non in fondo ai verdetti:
+	// è il punto che chiunque guarda per primo, e spesso l'unico che legge
+	// davvero. Un referto parziale scambiato per completo è peggio di nessun
+	// referto, perché dà una sicurezza che non c'è.
 	if !elevato {
 		fmt.Fprintf(p.W, "  %s  %s\n",
-			p.c(bold+yellow, "DIAGNOSI PARZIALE"),
-			"eseguita senza privilegi di amministratore")
+			p.c(bold+yellow, l.S("PARTIAL DIAGNOSIS", "DIAGNOSI PARZIALE")),
+			l.S("run without administrator privileges",
+				"eseguita senza privilegi di amministratore"))
 	}
 
 	fmt.Fprintf(p.W, "  %s\n", p.c(dim, strings.Repeat("─", wrapWidth)))
@@ -121,7 +134,7 @@ func (p Printer) findings(fs []rules.Finding) {
 	}
 	for _, f := range fs {
 		fmt.Fprintln(p.W)
-		label := fmt.Sprintf("● %s", f.Severity)
+		label := fmt.Sprintf("● %s", f.Severity.Label(p.Lang))
 		fmt.Fprintf(p.W, "  %s  %s\n", p.c(bold+p.sevColor(f.Severity), label),
 			p.c(dim, f.Area+" · "+f.Target))
 		fmt.Fprintf(p.W, "  %s\n", p.c(bold, f.Title))
@@ -139,9 +152,10 @@ func (p Printer) findings(fs []rules.Finding) {
 }
 
 func (p Printer) inventory(s model.Snapshot) {
+	l := p.Lang
 	fmt.Fprintln(p.W)
 	fmt.Fprintf(p.W, "  %s\n", p.c(dim, strings.Repeat("─", wrapWidth)))
-	fmt.Fprintf(p.W, "  %s\n", p.c(bold, "Dischi"))
+	fmt.Fprintf(p.W, "  %s\n", p.c(bold, l.S("Drives", "Dischi")))
 	for _, d := range s.Disks {
 		mark := "  "
 		if d.IsSystemDisk {
@@ -161,12 +175,12 @@ func (p Printer) inventory(s model.Snapshot) {
 	}
 
 	fmt.Fprintln(p.W)
-	fmt.Fprintf(p.W, "  %s\n", p.c(bold, "Volumi"))
+	fmt.Fprintf(p.W, "  %s\n", p.c(bold, l.S("Volumes", "Volumi")))
 	for _, v := range s.Volumes {
-		fmt.Fprintf(p.W, "    %s:  %-6s %7.1f GB totali, %7.1f GB liberi (%4.1f%%)  %s\n",
+		fmt.Fprintf(p.W, "    %s:  %-6s %7.1f GB %s, %7.1f GB %s (%4.1f%%)  %s\n",
 			v.DriveLetter, v.FileSystem,
-			float64(v.SizeBytes)/(1024*1024*1024),
-			float64(v.FreeBytes)/(1024*1024*1024),
+			float64(v.SizeBytes)/(1024*1024*1024), l.S("total", "totali"),
+			float64(v.FreeBytes)/(1024*1024*1024), l.S("free", "liberi"),
 			v.FreePercent(), v.HealthStatus)
 	}
 	fmt.Fprintln(p.W)
@@ -197,14 +211,4 @@ func wrap(s string, width int) []string {
 		cur += " " + w
 	}
 	return append(lines, cur)
-}
-
-// pluralize accorda il numero con il sostantivo. Sembra un dettaglio, ma il
-// referto finisce sotto gli occhi di un cliente: "1 problemi gravi" fa
-// sembrare improvvisato tutto il resto.
-func pluralize(n int, one, many string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, one)
-	}
-	return fmt.Sprintf("%d %s", n, many)
 }

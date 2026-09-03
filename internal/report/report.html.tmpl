@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Referto diagnostico — {{.Sys.Manufacturer}} {{.Sys.Model}}</title>
+<title>{{.T.Titolo}} — {{.Sys.Manufacturer}} {{.Sys.Model}}</title>
 <style>
   :root {
     --ink: #17181c;
@@ -72,7 +72,7 @@
   .dettaglio { color: #34373d; font-size: 14px; }
   .azione { margin-top: 10px; padding: 10px 12px; background: #f7f8f9;
             border-radius: 4px; font-size: 14px; }
-  .azione::before { content: "Cosa fare — "; font-weight: 700; }
+  .azione::before { content: attr(data-label) " — "; font-weight: 700; }
   .dati { margin-top: 8px; font-size: 11px; color: var(--muted);
           font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
           word-break: break-all; }
@@ -105,37 +105,37 @@
 
   <header>
     <div>
-      <h1>Referto diagnostico</h1>
+      <h1>{{.T.Titolo}}</h1>
       <div class="sottotitolo">
-        Analisi eseguita il {{.Data}}{{if .Opts.Cliente}} · Cliente: {{.Opts.Cliente}}{{end}}
+        {{.T.Sottotitolo}} {{.Data}}{{if .Opts.Customer}} · {{.T.Cliente}}: {{.Opts.Customer}}{{end}}
       </div>
     </div>
-    {{if .Opts.Tecnico}}
+    {{if .Opts.Technician}}
     <div class="tecnico">
-      <strong>{{.Opts.Tecnico}}</strong>
-      {{if .Opts.Contatto}}{{.Opts.Contatto}}{{end}}
+      <strong>{{.Opts.Technician}}</strong>
+      {{if .Opts.Contact}}{{.Opts.Contact}}{{end}}
     </div>
     {{end}}
   </header>
 
   <dl class="scheda">
-    <div><dt>Produttore</dt><dd>{{.Sys.Manufacturer}}</dd></div>
-    <div><dt>Modello</dt><dd>{{.Sys.Model}}</dd></div>
-    <div><dt>Tipo</dt><dd>{{.Sys.Chassis}}</dd></div>
-    <div><dt>Processore</dt><dd>{{.Sys.CPU}}</dd></div>
-    <div><dt>Core / thread</dt><dd>{{.Sys.Cores}} / {{.Sys.Threads}}</dd></div>
-    <div><dt>Memoria</dt><dd>{{.RAM}}</dd></div>
-    <div><dt>Sistema operativo</dt><dd>{{.Sys.OS}}</dd></div>
-    <div><dt>Versione</dt><dd>{{.Sys.OSVersion}}</dd></div>
+    <div><dt>{{$.T.Produttore}}</dt><dd>{{.Sys.Manufacturer}}</dd></div>
+    <div><dt>{{$.T.Modello}}</dt><dd>{{.Sys.Model}}</dd></div>
+    <div><dt>{{$.T.Tipo}}</dt><dd>{{.Sys.Chassis}}</dd></div>
+    <div><dt>{{$.T.Processore}}</dt><dd>{{.Sys.CPU}}</dd></div>
+    <div><dt>{{$.T.CoreThread}}</dt><dd>{{.Sys.Cores}} / {{.Sys.Threads}}</dd></div>
+    <div><dt>{{$.T.Memoria}}</dt><dd>{{.RAM}}</dd></div>
+    <div><dt>{{$.T.SistemaOperativo}}</dt><dd>{{.Sys.OS}}</dd></div>
+    <div><dt>{{$.T.Ver}}</dt><dd>{{.Sys.OSVersion}}</dd></div>
   </dl>
 
   <div class="esito {{.EsitoCSS}}">
-    <div class="etichetta">ESITO COMPLESSIVO</div>
+    <div class="etichetta">{{.T.Esito}}</div>
     <div class="frase">{{.Esito}} — {{.Riepilogo}}</div>
   </div>
 
   {{if .Findings}}
-  <h2>Cosa è stato rilevato</h2>
+  <h2>{{.T.Rilevato}}</h2>
   {{range .Findings}}
   <div class="verdetto {{.CSS}}">
     <div class="intestazione">
@@ -144,24 +144,24 @@
     </div>
     <div class="titolo">{{.Titolo}}</div>
     <div class="dettaglio">{{.Dettaglio}}</div>
-    <div class="azione">{{.Azione}}</div>
+    <div class="azione" data-label="{{$.T.CosaFare}}">{{.Azione}}</div>
     {{if .Dati}}<div class="dati">{{.Dati}}</div>{{end}}
   </div>
   {{end}}
   {{end}}
 
-  <h2>Dischi installati</h2>
+  <h2>{{.T.Dischi}}</h2>
   <table>
     <thead><tr>
-      <th>Tipo</th><th>Modello</th><th class="num">Capacità</th>
-      <th>Collegamento</th><th>Stato</th><th class="num">Temp.</th>
-      <th class="num">Vita usata</th><th class="num">Scritti</th>
+      <th>{{.T.ColTipo}}</th><th>{{.T.ColModello}}</th><th class="num">{{.T.ColCapacita}}</th>
+      <th>{{.T.ColBus}}</th><th>{{.T.ColStato}}</th><th class="num">{{.T.ColTemp}}</th>
+      <th class="num">{{.T.ColVita}}</th><th class="num">{{.T.ColScritti}}</th>
     </tr></thead>
     <tbody>
     {{range .Disks}}
       <tr>
         <td>{{.Tipo}}</td>
-        <td>{{.Modello}}{{if .DiSistema}} <span class="sistema">SISTEMA</span>{{end}}</td>
+        <td>{{.Modello}}{{if .DiSistema}} <span class="sistema">{{$.T.Sistema}}</span>{{end}}</td>
         <td class="num">{{.Capacita}}</td>
         <td>{{.Bus}}</td>
         <td>{{.Stato}}</td>
@@ -173,11 +173,11 @@
     </tbody>
   </table>
 
-  <h2>Volumi</h2>
+  <h2>{{.T.Volumi}}</h2>
   <table>
     <thead><tr>
-      <th>Unità</th><th>File system</th><th class="num">Capacità</th>
-      <th class="num">Spazio libero</th><th class="num">%</th><th>Stato</th>
+      <th>{{.T.ColUnita}}</th><th>{{.T.ColFS}}</th><th class="num">{{.T.ColCapacita}}</th>
+      <th class="num">{{.T.ColLibero}}</th><th class="num">%</th><th>{{.T.ColStato}}</th>
     </tr></thead>
     <tbody>
     {{range .Volumes}}
@@ -195,15 +195,12 @@
 
   {{if not .Elevated}}
   <div class="nota">
-    <strong>Analisi parziale.</strong> Il controllo è stato eseguito senza
-    privilegi di amministratore: lo stato di salute interno dei dischi
-    (SMART), le temperature e i livelli di usura non erano accessibili.
-    Un disco prossimo al guasto potrebbe non essere stato rilevato.
+    <strong>{{.T.NotaTitolo}}</strong> {{.T.NotaTesto}}
   </div>
   {{end}}
 
   <footer>
-    <span>Referto generato con diskseer {{.Version}}</span>
+    <span>{{.T.Generato}} {{.Version}}</span>
     <span>{{.Data}}</span>
   </footer>
 

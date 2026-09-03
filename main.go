@@ -12,11 +12,12 @@ import (
 
 	"github.com/shad272/diskseer/internal/collect"
 	"github.com/shad272/diskseer/internal/elevate"
+	"github.com/shad272/diskseer/internal/i18n"
 	"github.com/shad272/diskseer/internal/report"
 	"github.com/shad272/diskseer/internal/rules"
 )
 
-const version = "0.1.0"
+const version = "1.0.0"
 
 // main non fa altro che decidere quando uscire.
 //
@@ -32,7 +33,7 @@ func main() {
 	// più niente da mostrare: farla aspettare un INVIO lascerebbe l'utente
 	// davanti a due finestre, una delle quali chiede qualcosa senza motivo.
 	if !delegato && report.LanciatoDaEsploraRisorse() {
-		fmt.Fprint(os.Stderr, "\n  Premi INVIO per chiudere questa finestra... ")
+		fmt.Fprint(os.Stderr, "\n  Press ENTER to close this window... ")
 		bufio.NewReader(os.Stdin).ReadString('\n')
 	}
 
@@ -43,15 +44,16 @@ func main() {
 // altro processo.
 func esegui() (int, bool) {
 	var (
-		asJSON      = flag.Bool("json", false, "stampa i dati grezzi in JSON invece del referto")
-		noColor     = flag.Bool("no-color", false, "disattiva i colori ANSI")
-		showVersion = flag.Bool("version", false, "stampa la versione ed esce")
-		htmlPath    = flag.String("html", "", "salva il referto come pagina HTML nel percorso indicato")
-		tecnico     = flag.String("tecnico", "", "nome di chi esegue la diagnosi, stampato sul referto")
-		contatto    = flag.String("contatto", "", "recapito di chi esegue la diagnosi")
-		cliente     = flag.String("cliente", "", "nome del cliente, stampato sul referto")
-		noElevate   = flag.Bool("no-elevate", false, "non chiedere i privilegi di amministratore all'avvio")
-		anonimo     = flag.Bool("anonimo", false, "rimuove marca, modello e orari della macchina dai dati")
+		lang        = flag.String("lang", "en", "report language: en or it")
+		asJSON      = flag.Bool("json", false, "print raw data as JSON instead of the report")
+		noColor     = flag.Bool("no-color", false, "disable ANSI colours")
+		showVersion = flag.Bool("version", false, "print the version and exit")
+		htmlPath    = flag.String("html", "", "save the report as an HTML page at the given path")
+		technician  = flag.String("technician", "", "name of whoever ran the diagnosis, printed on the report")
+		contact     = flag.String("contact", "", "contact details of whoever ran the diagnosis")
+		customer    = flag.String("customer", "", "customer name, printed on the report")
+		noElevate   = flag.Bool("no-elevate", false, "do not request administrator privileges at startup")
+		anonymous   = flag.Bool("anonymous", false, "strip make, model and timestamps from the machine data")
 	)
 	flag.Parse()
 
@@ -68,14 +70,14 @@ func esegui() (int, bool) {
 
 	snap, err := collect.Collect()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "diskseer: raccolta dati fallita:", err)
+		fmt.Fprintln(os.Stderr, "diskseer: data collection failed:", err)
 		return 3, false
 	}
 
 	// L'anonimizzazione va fatta subito dopo la raccolta, prima che i dati
 	// vengano usati da qualunque cosa: così nessun percorso del programma può
 	// far uscire un dato identificativo per distrazione.
-	if *anonimo {
+	if *anonymous {
 		snap.Anonimizza()
 	}
 
@@ -89,7 +91,8 @@ func esegui() (int, bool) {
 		return 0, false
 	}
 
-	findings := rules.Run(snap)
+	l := i18n.Da(*lang)
+	findings := rules.Run(snap, l)
 
 	// Chi apre il programma con un doppio clic non ha modo di passare
 	// opzioni, quindi non otterrebbe mai un file da consegnare: vedrebbe il
@@ -101,11 +104,11 @@ func esegui() (int, bool) {
 	}
 
 	if percorsoHTML != "" {
-		opts := report.HTMLOptions{Tecnico: *tecnico, Contatto: *contatto, Cliente: *cliente}
-		if err := report.WriteHTML(percorsoHTML, snap, findings, opts); err != nil {
+		opts := report.HTMLOptions{Technician: *technician, Contact: *contact, Customer: *customer}
+		if err := report.WriteHTMLLang(percorsoHTML, l, snap, findings, opts); err != nil {
 			// Un referto non salvato non deve far perdere la diagnosi appena
 			// fatta: si segnala e si continua a stamparla a schermo.
-			fmt.Fprintln(os.Stderr, "diskseer: referto HTML non salvato:", err)
+			fmt.Fprintln(os.Stderr, "diskseer: HTML report not saved:", err)
 			percorsoHTML = ""
 		}
 	}
@@ -113,10 +116,11 @@ func esegui() (int, bool) {
 	report.Printer{
 		W:     os.Stdout,
 		Color: ansiOK && !*noColor && os.Getenv("NO_COLOR") == "",
+		Lang:  l,
 	}.Print(snap, findings)
 
 	if percorsoHTML != "" {
-		fmt.Printf("  Referto salvato in: %s\n\n", percorsoHTML)
+		fmt.Printf("  %s %s\n\n", l.S("Report saved to:", "Referto salvato in:"), percorsoHTML)
 	}
 
 	// Codice di uscita utilizzabile negli script: permette di far girare
@@ -143,7 +147,7 @@ func esegui() (int, bool) {
 // un referto che sovrascrive il precedente cancella proprio il confronto che
 // serve a capire se un disco sta peggiorando.
 func percorsoRefertoPredefinito() string {
-	nome := "referto-" + time.Now().Format("2006-01-02-1504") + ".html"
+	nome := "diskseer-report-" + time.Now().Format("2006-01-02-1504") + ".html"
 
 	exe, err := os.Executable()
 	if err != nil {
@@ -183,8 +187,8 @@ func chiediPrivilegi(disattivato, modalitaJSON bool) bool {
 		return false
 	}
 
-	fmt.Println("\n  Richiesta dei privilegi di amministratore in corso...")
-	fmt.Println("  Servono per leggere lo stato di salute dei dischi SATA e USB.")
+	fmt.Println("\n  Requesting administrator privileges...")
+	fmt.Println("  They are needed to read the health of SATA and USB drives.")
 
 	return elevate.Richiedi(eseguibile, os.Args[1:])
 }
