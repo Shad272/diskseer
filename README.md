@@ -1,3 +1,5 @@
+<img src="assets/diskseer-pulse-512.png" alt="diskseer" width="128" align="left" hspace="20" vspace="6">
+
 # diskseer
 
 **Disk diagnostics that gives you a verdict, not a spreadsheet.**
@@ -38,6 +40,8 @@ knows, and what to do about it.
 Single binary. No installer, no dependencies, no telemetry. Windows.
 
 **[Download the latest release →](../../releases/latest)**
+
+<br clear="left">
 
 ---
 
@@ -273,6 +277,23 @@ mislabelled one gets believed.
 means check the power supply. On an external one it means the user unplugs it
 without safe removal. The rule looks at how the drive is attached before it
 speaks, because wrong advice costs more credibility than no advice.
+
+### The icon
+
+Windows does not take an executable's icon from a file next to it: it wants it
+*inside*, in a resource section. The Go compiler cannot build one, but the
+linker picks up any `.syso` file it finds in the main package — a COFF object,
+the same format a C compiler emits.
+
+The usual answer is an external tool. `tools/makesyso.go` writes that object
+itself instead: COFF header, `.rsrc` section, the three-level resource tree
+(type → name → language), the image data, and one relocation per data
+descriptor so the linker can fill in addresses it alone knows. It keeps a
+project with zero dependencies at zero, for something written once that never
+changes again.
+
+Both the `.ico` and the generated `.syso` are committed, so cloning and
+building gets you the icon without running either tool.
 
 ### Test data
 

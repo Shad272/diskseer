@@ -31,6 +31,7 @@ type HTMLOptions struct {
 // leggere e collaudare. Un template pieno di calcoli e' codice che nessun
 // test raggiunge.
 type htmlView struct {
+	Logo      template.URL
 	Version   string
 	Data      string
 	T         etichette
@@ -153,6 +154,12 @@ func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.F
 
 	overall := rules.Overall(fs)
 	view := htmlView{
+		// template.URL dice al motore dei template che questo indirizzo è
+		// nostro e non va disinnescato. Senza, Go lo sostituirebbe con
+		// "#ZgotmplZ" — è la protezione che impedisce a un indirizzo arrivato
+		// da fuori di iniettare codice nella pagina, e qui va disattivata di
+		// proposito perché il contenuto lo produciamo noi.
+		Logo:      template.URL(logoDataURI()),
 		Version:   "1.0.0",
 		Data:      time.Now().Format(l.S("2006-01-02 at 15:04", "02/01/2006 alle 15:04")),
 		T:         etichetteDi(l),

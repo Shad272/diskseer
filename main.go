@@ -1,6 +1,6 @@
 // diskseer — diagnostica dischi che dà un verdetto, non una tabella di numeri.
 //
-// Copyright (C) 2026 Shad272
+// # Copyright (C) 2026 Shad272
 //
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by the Free
@@ -74,6 +74,10 @@ func esegui() (int, bool) {
 	}
 
 	ansiOK := report.PrepareConsole()
+
+	if !*asJSON {
+		fmt.Print(report.Banner(ansiOK && !*noColor && os.Getenv("NO_COLOR") == ""))
+	}
 
 	if chiediPrivilegi(*noElevate, *asJSON) {
 		return 0, true

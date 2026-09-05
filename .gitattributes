@@ -11,3 +11,14 @@
 # macchine reali, e normalizzarli significherebbe alterare il materiale di
 # prova.
 testdata/*.json -text
+
+# File binari: nessuna conversione, mai.
+#
+# La riga "* text=auto" qui sopra lascia che git indovini cosa sia testo e cosa
+# no. Di solito indovina, ma su questi file un byte cambiato non dà un errore:
+# l'immagine diventa illeggibile o il file di risorse fa fallire il
+# collegamento con un messaggio che non c'entra niente. Dichiararli
+# esplicitamente costa tre righe e toglie di mezzo il dubbio.
+*.png  binary
+*.ico  binary
+*.syso binary
