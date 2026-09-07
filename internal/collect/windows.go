@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/shad272/diskseer/internal/model"
@@ -51,8 +52,14 @@ func collect() (model.Snapshot, error) {
 	if err := json.Unmarshal(out, &snap); err != nil {
 		return model.Snapshot{}, fmt.Errorf("json non valido dal raccoglitore: %w", err)
 	}
-	enrichNVMe(&snap)
-	enrichSMART(&snap)
+	// Le letture NVMe e SMART parlano a famiglie di dispositivi diverse e non
+	// dipendono l'una dall'altra. Eseguirle insieme evita che il tempo di I/O
+	// di una famiglia si sommi a quello dell'altra sui PC con più dischi.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); enrichNVMe(&snap) }()
+	go func() { defer wg.Done(); enrichSMART(&snap) }()
+	wg.Wait()
 	snap.Time = time.Now()
 	return snap, nil
 }
