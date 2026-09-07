@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">diskseer</title>
+  <desc id="desc">Un occhio che osserva lo stato di un disco</desc>
+  <defs>
+    <linearGradient id="body" x1="35" y1="26" x2="221" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C6CFF"/><stop offset="1" stop-color="#39D6C4"/>
+    </linearGradient>
+    <radialGradient id="iris"><stop stop-color="#E9FFFC"/><stop offset=".42" stop-color="#45DCC8"/><stop offset="1" stop-color="#16786F"/></radialGradient>
+  </defs>
+  <rect x="18" y="18" width="220" height="220" rx="58" fill="#10131D"/>
+  <path d="M47 80c0-17 14-31 31-31h100c17 0 31 14 31 31v96c0 17-14 31-31 31H78c-17 0-31-14-31-31V80Z" fill="url(#body)"/>
+  <path d="M60 91h136v75H60z" fill="#171B28" opacity=".92"/>
+  <path d="M76 128c14-24 31-36 52-36s38 12 52 36c-14 24-31 36-52 36s-38-12-52-36Z" fill="#F7FAFF"/>
+  <circle cx="128" cy="128" r="27" fill="url(#iris)"/>
+  <circle cx="128" cy="128" r="12" fill="#10131D"/>
+  <circle cx="137" cy="118" r="5" fill="#fff"/>
+  <circle cx="177" cy="185" r="7" fill="#9BFFE9"/>
+</svg>

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" width="112" alt="diskseer logo">
+</p>
+
 # diskseer
 
 **Disk diagnostics that gives you a verdict, not a spreadsheet.**
@@ -35,7 +39,8 @@ knows, and what to do about it.
     before considering replacing the drive.
 ```
 
-Single binary. No installer, no dependencies, no telemetry. Windows.
+Single binary. No installer, no dependencies, no telemetry. Windows. Now with
+an offline graphical dashboard that opens automatically on double-click.
 
 **[Download the latest release →](../../releases/latest)**
 
@@ -125,7 +130,7 @@ Go 1.21 or newer. No module dependencies — check `go.mod`, it is four lines.
 ## Usage
 
 Double-click it and it does the right thing: asks for administrator rights,
-prints the report, saves an HTML copy next to itself, and waits before closing.
+saves the report next to the executable, and opens the graphical dashboard.
 
 From a terminal:
 
@@ -134,7 +139,15 @@ diskseer                     # full report
 diskseer --lang it           # report in Italian
 diskseer --json              # raw data, for scripts
 diskseer --json --anonymous  # raw data with the machine identity stripped
+diskseer --gui               # open the interactive graphical dashboard
 ```
+
+The GUI is fast by design: it is a self-contained local file, not an embedded
+web server. It opens in the default browser, works without internet, sends no
+data anywhere, supports light/dark themes and finding filters, and can save a
+clean PDF from the **Print / save PDF** button. Double-clicking `diskseer.exe`
+launches this interface automatically; terminal usage keeps the text output
+for scripts and remote support.
 
 Hand a customer a document:
 
@@ -234,6 +247,7 @@ Three layers, deliberately separated:
 internal/collect   reads raw data from the machine — one file per OS
 internal/rules     turns a snapshot into findings — where the knowledge lives
 internal/report    renders findings for humans — terminal and HTML
+internal/gui       opens the offline dashboard with the system browser
 ```
 
 The rules engine is a pure function: snapshot in, findings out. It touches
