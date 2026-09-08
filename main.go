@@ -23,12 +23,13 @@ import (
 
 	"github.com/shad272/diskseer/internal/collect"
 	"github.com/shad272/diskseer/internal/elevate"
+	"github.com/shad272/diskseer/internal/gui"
 	"github.com/shad272/diskseer/internal/i18n"
 	"github.com/shad272/diskseer/internal/report"
 	"github.com/shad272/diskseer/internal/rules"
 )
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 // main non fa altro che decidere quando uscire.
 //
@@ -38,12 +39,12 @@ const version = "1.0.0"
 // os.Exit sparso nel mezzo del programma chiuderebbe la finestra proprio nel
 // caso in cui volevamo tenerla aperta.
 func main() {
-	codice, delegato := esegui()
+	codice, senzaPausa := esegui()
 
 	// Se il lavoro è passato a un processo elevato, questa finestra non ha
 	// più niente da mostrare: farla aspettare un INVIO lascerebbe l'utente
 	// davanti a due finestre, una delle quali chiede qualcosa senza motivo.
-	if !delegato && report.LanciatoDaEsploraRisorse() {
+	if !senzaPausa && report.LanciatoDaEsploraRisorse() {
 		fmt.Fprint(os.Stderr, "\n  Press ENTER to close this window... ")
 		bufio.NewReader(os.Stdin).ReadString('\n')
 	}
@@ -65,6 +66,7 @@ func esegui() (int, bool) {
 		customer    = flag.String("customer", "", "customer name, printed on the report")
 		noElevate   = flag.Bool("no-elevate", false, "do not request administrator privileges at startup")
 		anonymous   = flag.Bool("anonymous", false, "strip make, model and timestamps from the machine data")
+		showGUI     = flag.Bool("gui", false, "open the interactive graphical report in the default browser")
 	)
 	flag.Parse()
 
@@ -113,8 +115,9 @@ func esegui() (int, bool) {
 	// opzioni, quindi non otterrebbe mai un file da consegnare: vedrebbe il
 	// referto scorrere a schermo e finirebbe lì. In quel caso il file lo
 	// salviamo da soli, accanto all'eseguibile.
+	lancioGrafico := *showGUI || report.LanciatoDaEsploraRisorse()
 	percorsoHTML := *htmlPath
-	if percorsoHTML == "" && report.LanciatoDaEsploraRisorse() {
+	if percorsoHTML == "" && lancioGrafico {
 		percorsoHTML = percorsoRefertoPredefinito()
 	}
 
@@ -125,6 +128,16 @@ func esegui() (int, bool) {
 			// fatta: si segnala e si continua a stamparla a schermo.
 			fmt.Fprintln(os.Stderr, "diskseer: HTML report not saved:", err)
 			percorsoHTML = ""
+		}
+	}
+
+	// Dal doppio clic (o con --gui) il referto è l'interfaccia: lo apriamo nel
+	// browser predefinito e non duplichiamo centinaia di righe nella console.
+	if lancioGrafico && percorsoHTML != "" {
+		if err := gui.Open(percorsoHTML); err == nil {
+			return codiceEsito(findings), true
+		} else {
+			fmt.Fprintln(os.Stderr, "diskseer: GUI not opened:", err)
 		}
 	}
 
@@ -140,13 +153,17 @@ func esegui() (int, bool) {
 
 	// Codice di uscita utilizzabile negli script: permette di far girare
 	// diskseer su più macchine e raccogliere solo quelle che hanno problemi.
+	return codiceEsito(findings), false
+}
+
+func codiceEsito(findings []rules.Finding) int {
 	switch rules.Overall(findings) {
 	case rules.SevCritical:
-		return 2, false
+		return 2
 	case rules.SevWarn:
-		return 1, false
+		return 1
 	}
-	return 0, false
+	return 0
 }
 
 // percorsoRefertoPredefinito sceglie dove salvare il referto quando nessuno

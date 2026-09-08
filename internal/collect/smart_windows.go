@@ -240,6 +240,19 @@ func parseSMARTAttributes(b []byte) []model.SMARTAttribute {
 func enrichSMART(snap *model.Snapshot) {
 	for i := range snap.Disks {
 		d := &snap.Disks[i]
+		// L'ordine di queste due condizioni non è estetico: è ciò che rende
+		// sicuro eseguire questa funzione in parallelo a enrichNVMe.
+		//
+		// Le due lavorano su insiemi di dischi disgiunti — quella NVMe salta
+		// tutto ciò che non è NVMe, questa salta gli NVMe — quindi non si
+		// pestano i piedi. Ma d.NVMe è un campo che l'altra *scrive*: leggerlo
+		// qui per un disco NVMe sarebbe una lettura concorrente a una
+		// scrittura, cioè una corsa critica. Non accade solo perché il primo
+		// controllo è vero per tutti gli NVMe e il secondo non viene mai
+		// valutato.
+		//
+		// Invertendoli il programma continuerebbe a compilare, a passare i
+		// test e a funzionare quasi sempre.
 		if d.BusType == "NVMe" || d.NVMe != nil {
 			continue
 		}

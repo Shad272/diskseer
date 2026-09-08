@@ -1,6 +1,7 @@
 package report
 
 import (
+	"bytes"
 	_ "embed"
 	"fmt"
 	"html/template"
@@ -17,6 +18,8 @@ import (
 //go:embed report.html.tmpl
 var htmlTemplate string
 
+var parsedHTMLTemplate = template.Must(template.New("referto").Parse(htmlTemplate))
+
 // HTMLOptions sono i dati che il programma non puo' sapere da solo: chi ha
 // fatto la diagnosi e per chi. Senza questi il referto resta un file tecnico;
 // con questi diventa un documento che si consegna.
@@ -32,6 +35,7 @@ type HTMLOptions struct {
 // test raggiunge.
 type htmlView struct {
 	Logo      template.URL
+	Lang      string
 	Version   string
 	Data      string
 	T         etichette
@@ -45,6 +49,9 @@ type htmlView struct {
 	Findings  []htmlFinding
 	Disks     []htmlDisk
 	Volumes   []htmlVolume
+	Criticals int
+	Warnings  int
+	Infos     int
 }
 
 type htmlFinding struct {
@@ -78,6 +85,7 @@ type htmlVolume struct {
 	Percento string
 	Stato    string
 	Critico  bool
+	UsedPct  string
 }
 
 const gigabyte = 1024 * 1024 * 1024
@@ -105,6 +113,8 @@ type etichette struct {
 	CoreThread, Memoria, SistemaOperativo, Ver string
 	Sistema, CosaFare, NotaTitolo, NotaTesto   string
 	Cliente                                    string
+	Panoramica, Problemi, Filtra, Tutti        string
+	Stampa, NessunProblema, Tema, Analisi      string
 }
 
 func etichetteDi(l i18n.Lingua) etichette {
@@ -143,15 +153,18 @@ func etichetteDi(l i18n.Lingua) etichette {
 		NotaTesto: l.S(
 			"This check ran without administrator privileges: the internal health of the drives (S.M.A.R.T.), temperatures and wear levels were not accessible. A drive close to failure may have gone undetected.",
 			"Il controllo è stato eseguito senza privilegi di amministratore: lo stato di salute interno dei dischi (SMART), le temperature e i livelli di usura non erano accessibili. Un disco prossimo al guasto potrebbe non essere stato rilevato."),
+		Panoramica:     l.S("Overview", "Panoramica"),
+		Problemi:       l.S("Findings", "Segnalazioni"),
+		Filtra:         l.S("Filter findings", "Filtra segnalazioni"),
+		Tutti:          l.S("All", "Tutte"),
+		Stampa:         l.S("Print / save PDF", "Stampa / salva PDF"),
+		NessunProblema: l.S("No actionable problems found", "Nessun problema che richieda intervento"),
+		Tema:           l.S("Switch theme", "Cambia tema"),
+		Analisi:        l.S("Disk health analysis", "Analisi salute dischi"),
 	}
 }
 
 func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Finding, opts HTMLOptions) error {
-	tmpl, err := template.New("referto").Parse(htmlTemplate)
-	if err != nil {
-		return fmt.Errorf("template non valido: %w", err)
-	}
-
 	overall := rules.Overall(fs)
 	view := htmlView{
 		// template.URL dice al motore dei template che questo indirizzo è
@@ -160,7 +173,8 @@ func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.F
 		// da fuori di iniettare codice nella pagina, e qui va disattivata di
 		// proposito perché il contenuto lo produciamo noi.
 		Logo:      template.URL(logoDataURI()),
-		Version:   "1.0.0",
+		Lang:      l.S("en", "it"),
+		Version:   "1.1.0",
 		Data:      time.Now().Format(l.S("2006-01-02 at 15:04", "02/01/2006 alle 15:04")),
 		T:         etichetteDi(l),
 		Opts:      opts,
@@ -173,6 +187,14 @@ func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.F
 	}
 
 	for _, f := range fs {
+		switch f.Severity {
+		case rules.SevCritical:
+			view.Criticals++
+		case rules.SevWarn:
+			view.Warnings++
+		default:
+			view.Infos++
+		}
 		view.Findings = append(view.Findings, htmlFinding{
 			Severita:  f.Severity.Label(l),
 			CSS:       f.Severity.Slug(),
@@ -217,16 +239,18 @@ func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.F
 			Capacita: gb(v.SizeBytes), Libero: gb(v.FreeBytes),
 			Percento: fmt.Sprintf("%.1f%%", v.FreePercent()),
 			Stato:    stato, Critico: v.FreePercent() < freeSpaceLowPct,
+			UsedPct: fmt.Sprintf("%.1f", 100-v.FreePercent()),
 		})
 	}
 
-	f, err := os.Create(path)
-	if err != nil {
+	var out bytes.Buffer
+	if err := parsedHTMLTemplate.Execute(&out, view); err != nil {
+		return fmt.Errorf("generazione referto: %w", err)
+	}
+	if err := os.WriteFile(path, out.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("creazione referto: %w", err)
 	}
-	defer f.Close()
-
-	return tmpl.Execute(f, view)
+	return nil
 }
 
 const freeSpaceLowPct = 10.0
