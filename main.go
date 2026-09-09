@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"time"
 
@@ -23,11 +24,12 @@ import (
 	"github.com/shad272/diskseer/internal/elevate"
 	"github.com/shad272/diskseer/internal/gui"
 	"github.com/shad272/diskseer/internal/i18n"
+	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/report"
 	"github.com/shad272/diskseer/internal/rules"
 )
 
-const version = "1.1.1"
+const version = "1.2.0"
 
 // main non fa altro che decidere quando uscire.
 //
@@ -65,6 +67,8 @@ func esegui() (int, bool) {
 		noElevate   = flag.Bool("no-elevate", false, "do not request administrator privileges at startup")
 		anonymous   = flag.Bool("anonymous", false, "strip make, model and timestamps from the machine data")
 		showGUI     = flag.Bool("gui", false, "open the interactive graphical report in the default browser")
+		watch       = flag.Bool("watch", false, "keep running and refresh the readings continuously")
+		interval    = flag.Duration("interval", 3*time.Second, "how often to refresh in watch mode")
 	)
 	flag.Parse()
 
@@ -127,6 +131,23 @@ func esegui() (int, bool) {
 			fmt.Fprintln(os.Stderr, "diskseer: HTML report not saved:", err)
 			percorsoHTML = ""
 		}
+	}
+
+	// In modalità dal vivo il ciclo prende il posto di tutto il resto: stampa
+	// lui, riscrive lui il referto, e finisce solo quando l'utente lo ferma.
+	if *watch {
+		if *interval < time.Second {
+			*interval = time.Second
+		}
+		opts := report.HTMLOptions{Technician: *technician, Contact: *contact, Customer: *customer}
+		if lancioGrafico && percorsoHTML != "" {
+			if err := gui.Open(percorsoHTML); err != nil {
+				fmt.Fprintln(os.Stderr, "diskseer: GUI not opened:", err)
+			}
+		}
+		return ciclaDalVivo(snap, l,
+			ansiOK && !*noColor && os.Getenv("NO_COLOR") == "", ansiOK,
+			*interval, percorsoHTML, opts), true
 	}
 
 	// Dal doppio clic (o con --gui) il referto è l'interfaccia: lo apriamo nel
@@ -221,4 +242,61 @@ func chiediPrivilegi(disattivato, modalitaJSON bool) bool {
 	fmt.Println("  They are needed to read the health of SATA and USB drives.")
 
 	return elevate.Richiedi(eseguibile, os.Args[1:])
+}
+
+// ciclaDalVivo tiene il programma acceso e ridisegna lo stato a intervalli.
+//
+// L'inventario della macchina si raccoglie una volta sola: marca, modello e
+// capacità dei dischi non cambiano mentre il programma è in esecuzione, e
+// rifarli costerebbe tre secondi a giro contro i tre millisecondi che serve
+// per rileggere temperature, contatori e spazio libero.
+//
+// Se è stato chiesto anche il referto HTML, viene riscritto a ogni giro: la
+// pagina si ricarica da sola e mostra gli stessi valori del terminale. È il
+// motivo per cui non serve un server locale — il file su disco è già il canale
+// di comunicazione fra i due.
+func ciclaDalVivo(snap model.Snapshot, l i18n.Lingua, colore, ridisegna bool,
+	intervallo time.Duration, percorsoHTML string, opts report.HTMLOptions) int {
+
+	stampante := report.Printer{W: os.Stdout, Color: colore, Lang: l}
+	ripristina := report.PrepareLive(os.Stdout, ridisegna)
+	defer ripristina()
+
+	// Ctrl+C non deve limitarsi a terminare il processo: il cursore è stato
+	// nascosto, e un terminale che resta senza cursore sembra bloccato anche
+	// dopo che il programma è finito.
+	interruzione := make(chan os.Signal, 1)
+	signal.Notify(interruzione, os.Interrupt)
+	defer signal.Stop(interruzione)
+
+	ticchettio := time.NewTicker(intervallo)
+	defer ticchettio.Stop()
+
+	if colore {
+		fmt.Print("\033[2J") // una pulizia sola all'avvio, poi si ridisegna sul posto
+	}
+
+	for {
+		findings := rules.Run(snap, l)
+		stampante.PrintLive(snap, findings, report.LiveOptions{
+			Intervallo: intervallo,
+			Elevato:    snap.Elevated,
+			Ridisegna:  ridisegna,
+		})
+
+		if percorsoHTML != "" {
+			// Un referto non scritto non deve fermare il ciclo: la vista a
+			// terminale continua a funzionare, ed è quella che si sta guardando.
+			_ = report.WriteHTMLLive(percorsoHTML, l, snap, findings, opts, intervallo)
+		}
+
+		select {
+		case <-interruzione:
+			ripristina()
+			fmt.Println()
+			return codiceEsito(findings)
+		case <-ticchettio.C:
+			collect.Refresh(&snap)
+		}
+	}
 }

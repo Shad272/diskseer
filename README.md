@@ -140,6 +140,8 @@ diskseer --lang it           # report in Italian
 diskseer --json              # raw data, for scripts
 diskseer --json --anonymous  # raw data with the machine identity stripped
 diskseer --gui               # open the interactive graphical dashboard
+diskseer --watch             # stay open and refresh the readings live
+diskseer --watch --gui       # live dashboard in the browser, live view in the terminal
 ```
 
 The GUI is fast by design: it is a self-contained local file, not an embedded
@@ -148,6 +150,26 @@ data anywhere, supports light/dark themes and finding filters, and can save a
 clean PDF from the **Print / save PDF** button. Double-clicking `diskseer.exe`
 launches this interface automatically; terminal usage keeps the text output
 for scripts and remote support.
+
+### Watch mode
+
+`--watch` keeps diskseer running and re-reads the drives every few seconds
+(`--interval`, 3s by default). The terminal redraws a condensed dashboard in
+place — temperatures, free space, per-drive health, finding counts — and if a
+report path is set, the HTML file is rewritten each cycle and the open page
+reloads itself, scroll position preserved.
+
+The refresh is cheap on purpose. A full collection takes about three seconds
+because it starts PowerShell for the machine inventory; the values that
+actually move — temperatures, drive counters, free space — are read with
+direct system calls in about three milliseconds. The inventory is collected
+once and the loop only refreshes what changes: **roughly a thousand times
+faster per cycle**.
+
+There is deliberately no local web server behind the live page. A file opened
+from disk cannot fetch data on its own — browsers forbid it — so the page
+reloads instead, and diskseer rewrites the file. No listening port, no
+background service, still one self-contained file.
 
 Hand a customer a document:
 

@@ -11,6 +11,7 @@ dist/
 # Referti generati durante le prove: contengono dati della macchina reale
 diskseer-report*.html
 anteprima.html
+live.html
 referto*.html
 admin-report.txt
 smart-probe.txt

@@ -34,6 +34,10 @@ type HTMLOptions struct {
 // leggere e collaudare. Un template pieno di calcoli e' codice che nessun
 // test raggiunge.
 type htmlView struct {
+	// RicaricaOgni, se maggiore di zero, sono i secondi dopo i quali la pagina
+	// si ricarica da sola. Vale solo in modalità dal vivo.
+	RicaricaOgni int
+
 	Logo      template.URL
 	Lang      string
 	Version   string
@@ -165,6 +169,29 @@ func etichetteDi(l i18n.Lingua) etichette {
 }
 
 func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Finding, opts HTMLOptions) error {
+	return scriviHTML(path, l, snap, fs, opts, 0)
+}
+
+// WriteHTMLLive scrive un referto che si aggiorna da solo.
+//
+// La pagina si ricarica a intervalli invece di andare a cercare i dati da
+// sola: un file aperto dal disco non può interrogare nient'altro — i browser
+// lo vietano — e l'alternativa sarebbe un server locale in ascolto su una
+// porta, che questo programma non vuole essere.
+//
+// Il risultato è lo stesso e il prezzo è modesto: il file viene riscritto per
+// intero a ogni giro, ma sono venti kilobyte.
+func WriteHTMLLive(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Finding,
+	opts HTMLOptions, ogni time.Duration) error {
+	secondi := int(ogni.Seconds())
+	if secondi < 1 {
+		secondi = 1
+	}
+	return scriviHTML(path, l, snap, fs, opts, secondi)
+}
+
+func scriviHTML(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Finding,
+	opts HTMLOptions, ricaricaOgni int) error {
 	overall := rules.Overall(fs)
 	view := htmlView{
 		// template.URL dice al motore dei template che questo indirizzo è
@@ -172,18 +199,19 @@ func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.F
 		// "#ZgotmplZ" — è la protezione che impedisce a un indirizzo arrivato
 		// da fuori di iniettare codice nella pagina, e qui va disattivata di
 		// proposito perché il contenuto lo produciamo noi.
-		Logo:      template.URL(logoDataURI()),
-		Lang:      l.S("en", "it"),
-		Version:   "1.1.1",
-		Data:      time.Now().Format(l.S("2006-01-02 at 15:04", "02/01/2006 alle 15:04")),
-		T:         etichetteDi(l),
-		Opts:      opts,
-		Sys:       snap.System,
-		RAM:       fmt.Sprintf("%.0f GB", float64(snap.System.RAMBytes)/gigabyte),
-		Esito:     overall.Label(l),
-		EsitoCSS:  overall.Slug(),
-		Riepilogo: Summary(l, fs),
-		Elevated:  snap.Elevated,
+		RicaricaOgni: ricaricaOgni,
+		Logo:         template.URL(logoDataURI()),
+		Lang:         l.S("en", "it"),
+		Version:      "1.1.1",
+		Data:         time.Now().Format(l.S("2006-01-02 at 15:04", "02/01/2006 alle 15:04")),
+		T:            etichetteDi(l),
+		Opts:         opts,
+		Sys:          snap.System,
+		RAM:          fmt.Sprintf("%.0f GB", float64(snap.System.RAMBytes)/gigabyte),
+		Esito:        overall.Label(l),
+		EsitoCSS:     overall.Slug(),
+		Riepilogo:    Summary(l, fs),
+		Elevated:     snap.Elevated,
 	}
 
 	for _, f := range fs {
