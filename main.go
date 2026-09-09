@@ -150,16 +150,14 @@ func esegui() (int, bool) {
 			*interval, percorsoHTML, opts), true
 	}
 
-	// Dal doppio clic (o con --gui) il referto è l'interfaccia: lo apriamo nel
-	// browser predefinito e non duplichiamo centinaia di righe nella console.
-	if lancioGrafico && percorsoHTML != "" {
-		if err := gui.Open(percorsoHTML); err == nil {
-			return codiceEsito(findings), true
-		} else {
-			fmt.Fprintln(os.Stderr, "diskseer: GUI not opened:", err)
-		}
-	}
-
+	// Il referto si stampa sempre, anche quando si apre il browser.
+	//
+	// Prima non era così: dal doppio clic il programma apriva la pagina e
+	// usciva, per non duplicare centinaia di righe nella console. Ma la
+	// finestra del doppio clic resta aperta ad aspettare un INVIO, e ci
+	// scorreva dentro il solo banner: chi la guardava vedeva un programma che
+	// non aveva fatto niente. La pagina e la console sono due letture della
+	// stessa diagnosi, non due alternative da scegliere per conto dell'utente.
 	report.Printer{
 		W:     os.Stdout,
 		Color: ansiOK && !*noColor && os.Getenv("NO_COLOR") == "",
@@ -168,6 +166,12 @@ func esegui() (int, bool) {
 
 	if percorsoHTML != "" {
 		fmt.Printf("  %s %s\n\n", l.S("Report saved to:", "Referto salvato in:"), percorsoHTML)
+	}
+
+	if lancioGrafico && percorsoHTML != "" {
+		if err := gui.Open(percorsoHTML); err != nil {
+			fmt.Fprintln(os.Stderr, "diskseer: GUI not opened:", err)
+		}
 	}
 
 	// Codice di uscita utilizzabile negli script: permette di far girare
