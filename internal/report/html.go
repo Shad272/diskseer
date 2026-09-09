@@ -174,7 +174,7 @@ func WriteHTMLLang(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.F
 		// proposito perché il contenuto lo produciamo noi.
 		Logo:      template.URL(logoDataURI()),
 		Lang:      l.S("en", "it"),
-		Version:   "1.1.0",
+		Version:   "1.1.1",
 		Data:      time.Now().Format(l.S("2006-01-02 at 15:04", "02/01/2006 alle 15:04")),
 		T:         etichetteDi(l),
 		Opts:      opts,

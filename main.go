@@ -1,8 +1,6 @@
 // diskseer — diagnostica dischi che dà un verdetto, non una tabella di numeri.
 //
-// # Copyright (C) 2026 Shad272
-//
-// This program is free software: you can redistribute it and/or modify it
+// Copyright (C) 2026 Shad272. This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by the Free
 // Software Foundation, either version 3 of the License, or (at your option)
 // any later version. This program is distributed in the hope that it will be
@@ -29,7 +27,7 @@ import (
 	"github.com/shad272/diskseer/internal/rules"
 )
 
-const version = "1.1.0"
+const version = "1.1.1"
 
 // main non fa altro che decidere quando uscire.
 //

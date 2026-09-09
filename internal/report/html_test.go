@@ -56,3 +56,46 @@ func BenchmarkWriteHTML(b *testing.B) {
 		}
 	}
 }
+
+// I filtri per gravità nascondono i verdetti impostando l'attributo hidden.
+// Funziona solo se il foglio di stile del referto lo dichiara esplicitamente.
+//
+// Il browser ha una regola predefinita "[hidden] { display: none }", ma le
+// regole scritte dentro la pagina battono sempre quelle predefinite: con un
+// ".finding { display: grid }" fra i propri stili, l'attributo viene impostato
+// e non produce alcun effetto. È il difetto peggiore da diagnosticare a
+// occhio, perché non dà errori: i pulsanti si illuminano, il codice gira, e
+// non succede niente.
+func TestIFiltriNascondonoDavveroIVerdetti(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot-completo.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snap model.Snapshot
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "report.html")
+	if err := WriteHTMLLang(path, i18n.EN, snap, rules.Run(snap, i18n.EN), HTMLOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(out)
+
+	if !strings.Contains(html, `data-severity=`) {
+		t.Error("i verdetti non riportano la propria gravità: il filtro non ha su cosa lavorare")
+	}
+	if !strings.Contains(html, `data-filter=`) {
+		t.Error("i pulsanti di filtro non dichiarano cosa filtrano")
+	}
+
+	// Il controllo che conta: la regola che rende efficace l'attributo hidden.
+	if !strings.Contains(html, ".finding[hidden]{display:none}") {
+		t.Error("manca la regola .finding[hidden]{display:none}: i pulsanti di " +
+			"filtro si illuminerebbero senza nascondere nulla, perché il " +
+			"display dichiarato nella pagina prevale su quello del browser")
+	}
+}
