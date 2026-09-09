@@ -277,3 +277,30 @@ func (s *Snapshot) Anonimizza() {
 		s.Thermals[i].Name = fmt.Sprintf("ZONA TERMICA %d", i+1)
 	}
 }
+
+// Clona restituisce una copia su cui si può scrivere senza toccare l'originale.
+//
+// Serve soprattutto ad Anonimizza, che modifica sul posto. Senza una copia,
+// esportare una versione anonima dei dati significherebbe cancellare marca e
+// modello anche dalla diagnosi che si sta guardando in quel momento: uno
+// Snapshot contiene fette e puntatori, e assegnarlo a un'altra variabile copia
+// solo l'intestazione, lasciando i due esemplari a condividere gli stessi
+// elementi.
+//
+// Sono duplicate le parti che qualcuno modifica: le fette e la batteria. I
+// puntatori numerici dentro Disk restano condivisi, e va bene così: nel
+// programma non viene mai scritto il valore puntato, viene sostituito il
+// puntatore — che è un'operazione sulla copia e non si vede dall'altra parte.
+func (s Snapshot) Clona() Snapshot {
+	c := s
+
+	c.Disks = append([]Disk(nil), s.Disks...)
+	c.Volumes = append([]Volume(nil), s.Volumes...)
+	c.Thermals = append([]Thermal(nil), s.Thermals...)
+
+	if s.Battery != nil {
+		b := *s.Battery
+		c.Battery = &b
+	}
+	return c
+}

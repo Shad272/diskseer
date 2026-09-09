@@ -27,34 +27,19 @@ import (
 	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/report"
 	"github.com/shad272/diskseer/internal/rules"
+	"github.com/shad272/diskseer/internal/settings"
 )
 
 const version = "1.2.0"
 
-// main non fa altro che decidere quando uscire.
+// main non fa altro che decidere con quale codice uscire.
 //
-// Il lavoro sta in esegui(), che restituisce il codice di uscita invece di
-// chiamare os.Exit da dentro: os.Exit termina il processo all'istante,
-// saltando qualunque cosa venga dopo. Con la pausa finale da gestire, un
-// os.Exit sparso nel mezzo del programma chiuderebbe la finestra proprio nel
-// caso in cui volevamo tenerla aperta.
-func main() {
-	codice, senzaPausa := esegui()
+// Il lavoro sta in esegui(), che restituisce il codice invece di chiamare
+// os.Exit da dentro: os.Exit termina il processo all'istante, e un os.Exit
+// sparso nel mezzo del programma salterebbe qualunque cosa venga dopo.
+func main() { os.Exit(esegui()) }
 
-	// Se il lavoro è passato a un processo elevato, questa finestra non ha
-	// più niente da mostrare: farla aspettare un INVIO lascerebbe l'utente
-	// davanti a due finestre, una delle quali chiede qualcosa senza motivo.
-	if !senzaPausa && report.LanciatoDaEsploraRisorse() {
-		fmt.Fprint(os.Stderr, "\n  Press ENTER to close this window... ")
-		bufio.NewReader(os.Stdin).ReadString('\n')
-	}
-
-	os.Exit(codice)
-}
-
-// esegui restituisce il codice di uscita e se il lavoro è stato affidato a un
-// altro processo.
-func esegui() (int, bool) {
+func esegui() int {
 	var (
 		lang        = flag.String("lang", "en", "report language: en or it")
 		asJSON      = flag.Bool("json", false, "print raw data as JSON instead of the report")
@@ -66,31 +51,67 @@ func esegui() (int, bool) {
 		customer    = flag.String("customer", "", "customer name, printed on the report")
 		noElevate   = flag.Bool("no-elevate", false, "do not request administrator privileges at startup")
 		anonymous   = flag.Bool("anonymous", false, "strip make, model and timestamps from the machine data")
-		showGUI     = flag.Bool("gui", false, "open the interactive graphical report in the default browser")
+		showGUI     = flag.Bool("gui", false, "open the report in the default browser")
 		watch       = flag.Bool("watch", false, "keep running and refresh the readings continuously")
-		interval    = flag.Duration("interval", 3*time.Second, "how often to refresh in watch mode")
+		interval    = flag.Duration("interval", 3*time.Second, "how often to refresh in watch mode (minimum 1s)")
+		showMenu    = flag.Bool("menu", false, "show the interactive menu instead of printing the report once")
 	)
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println("diskseer", version)
-		return 0, false
+		return 0
 	}
 
 	ansiOK := report.PrepareConsole()
 
+	// Le preferenze salvate valgono come punto di partenza, le opzioni scritte
+	// sulla riga di comando le scavalcano. L'ordine non è arbitrario: chi
+	// scrive un'opzione la sta chiedendo adesso, per questa esecuzione, e deve
+	// vincere su una scelta fatta settimane fa dentro un menu.
+	cfg := settings.Carica()
+	if scrittoDaRigaDiComando("lang") {
+		cfg.Language = *lang
+	}
+	if scrittoDaRigaDiComando("interval") {
+		cfg.Interval = interval.String()
+	}
+	if *technician != "" {
+		cfg.Technician = *technician
+	}
+	if *contact != "" {
+		cfg.Contact = *contact
+	}
+	if *customer != "" {
+		cfg.Customer = *customer
+	}
+	// I colori spenti dalla riga di comando restano fuori dalle impostazioni di
+	// proposito: --no-color riguarda questa esecuzione, non è una preferenza da
+	// ricordare. Se finisse dentro cfg, basterebbe un --no-color seguito da una
+	// qualsiasi modifica dal menu per salvare un diskseer in bianco e nero che
+	// nessuno ha chiesto.
+	coloriConsentiti := !*noColor && os.Getenv("NO_COLOR") == ""
+
+	l := i18n.Da(cfg.Language)
+	colore := ansiOK && coloriConsentiti && cfg.Colors
+
 	if !*asJSON {
-		fmt.Print(report.Banner(ansiOK && !*noColor && os.Getenv("NO_COLOR") == ""))
+		fmt.Print(report.Banner(colore))
 	}
 
-	if chiediPrivilegi(*noElevate, *asJSON) {
-		return 0, true
+	// Il menu compare solo quando c'è una persona davanti: con un doppio clic,
+	// o quando lo si chiede. Mai in modalità JSON, che serve agli script, e mai
+	// insieme a --watch, che è già una schermata interattiva per conto suo.
+	modalitaMenu := (*showMenu || report.LanciatoDaEsploraRisorse()) && !*asJSON && !*watch
+
+	if chiediPrivilegi(*noElevate, *asJSON, l) {
+		return 0
 	}
 
 	snap, err := collect.Collect()
-	if err != nil {
+	if err != nil && !modalitaMenu {
 		fmt.Fprintln(os.Stderr, "diskseer: data collection failed:", err)
-		return 3, false
+		return 3
 	}
 
 	// L'anonimizzazione va fatta subito dopo la raccolta, prima che i dati
@@ -105,26 +126,50 @@ func esegui() (int, bool) {
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(snap); err != nil {
 			fmt.Fprintln(os.Stderr, "diskseer:", err)
-			return 3, false
+			return 3
 		}
-		return 0, false
+		return 0
 	}
 
-	l := i18n.Da(*lang)
 	findings := rules.Run(snap, l)
+	stampante := report.Printer{W: os.Stdout, Color: colore, Lang: l}
 
-	// Chi apre il programma con un doppio clic non ha modo di passare
-	// opzioni, quindi non otterrebbe mai un file da consegnare: vedrebbe il
-	// referto scorrere a schermo e finirebbe lì. In quel caso il file lo
-	// salviamo da soli, accanto all'eseguibile.
-	lancioGrafico := *showGUI || report.LanciatoDaEsploraRisorse()
+	// Modalità interattiva: si mostra la diagnosi e poi si lascia decidere.
+	//
+	// Nessun file viene scritto da solo. Prima il referto HTML compariva
+	// accanto all'eseguibile a ogni doppio clic, e la cartella si riempiva di
+	// pagine che nessuno aveva chiesto; adesso lo si chiede dal menu.
+	if modalitaMenu {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "diskseer: data collection failed:", err)
+		} else {
+			stampante.Print(snap, findings)
+		}
+		return eseguiMenu(&sessione{
+			snap:             snap,
+			findings:         findings,
+			cfg:              cfg,
+			lingua:           l,
+			ansi:             ansiOK,
+			coloriConsentiti: coloriConsentiti,
+
+			in:             bufio.NewReader(os.Stdin),
+			erroreRaccolta: err,
+		})
+	}
+
+	opts := report.HTMLOptions{
+		Technician: cfg.Technician,
+		Contact:    cfg.Contact,
+		Customer:   cfg.Customer,
+		Version:    version,
+	}
+
 	percorsoHTML := *htmlPath
-	if percorsoHTML == "" && lancioGrafico {
+	if percorsoHTML == "" && *showGUI {
 		percorsoHTML = percorsoRefertoPredefinito()
 	}
-
 	if percorsoHTML != "" {
-		opts := report.HTMLOptions{Technician: *technician, Contact: *contact, Customer: *customer, Version: version}
 		if err := report.WriteHTMLLang(percorsoHTML, l, snap, findings, opts); err != nil {
 			// Un referto non salvato non deve far perdere la diagnosi appena
 			// fatta: si segnala e si continua a stamparla a schermo.
@@ -136,47 +181,46 @@ func esegui() (int, bool) {
 	// In modalità dal vivo il ciclo prende il posto di tutto il resto: stampa
 	// lui, riscrive lui il referto, e finisce solo quando l'utente lo ferma.
 	if *watch {
-		if *interval < time.Second {
-			*interval = time.Second
+		if *showGUI && percorsoHTML != "" {
+			apriNelBrowser(percorsoHTML)
 		}
-		opts := report.HTMLOptions{Technician: *technician, Contact: *contact, Customer: *customer, Version: version}
-		if lancioGrafico && percorsoHTML != "" {
-			if err := gui.Open(percorsoHTML); err != nil {
-				fmt.Fprintln(os.Stderr, "diskseer: GUI not opened:", err)
-			}
-		}
-		return ciclaDalVivo(snap, l,
-			ansiOK && !*noColor && os.Getenv("NO_COLOR") == "", ansiOK,
-			*interval, percorsoHTML, opts), true
+		return ciclaDalVivo(&snap, l, colore, ansiOK, cfg.Durata(), percorsoHTML, opts)
 	}
 
-	// Il referto si stampa sempre, anche quando si apre il browser.
-	//
-	// Prima non era così: dal doppio clic il programma apriva la pagina e
-	// usciva, per non duplicare centinaia di righe nella console. Ma la
-	// finestra del doppio clic resta aperta ad aspettare un INVIO, e ci
-	// scorreva dentro il solo banner: chi la guardava vedeva un programma che
-	// non aveva fatto niente. La pagina e la console sono due letture della
-	// stessa diagnosi, non due alternative da scegliere per conto dell'utente.
-	report.Printer{
-		W:     os.Stdout,
-		Color: ansiOK && !*noColor && os.Getenv("NO_COLOR") == "",
-		Lang:  l,
-	}.Print(snap, findings)
+	stampante.Print(snap, findings)
 
 	if percorsoHTML != "" {
 		fmt.Printf("  %s %s\n\n", l.S("Report saved to:", "Referto salvato in:"), percorsoHTML)
-	}
-
-	if lancioGrafico && percorsoHTML != "" {
-		if err := gui.Open(percorsoHTML); err != nil {
-			fmt.Fprintln(os.Stderr, "diskseer: GUI not opened:", err)
+		if *showGUI {
+			apriNelBrowser(percorsoHTML)
 		}
 	}
 
 	// Codice di uscita utilizzabile negli script: permette di far girare
 	// diskseer su più macchine e raccogliere solo quelle che hanno problemi.
-	return codiceEsito(findings), false
+	return codiceEsito(findings)
+}
+
+// scrittoDaRigaDiComando distingue un'opzione scritta davvero dall'utente dal
+// suo valore predefinito.
+//
+// Senza questa distinzione non si potrebbe avere una lingua predefinita nelle
+// impostazioni: il valore di --lang è "en" anche quando nessuno l'ha scritto,
+// e cancellerebbe a ogni avvio la scelta salvata dal menu.
+func scrittoDaRigaDiComando(nome string) bool {
+	trovato := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == nome {
+			trovato = true
+		}
+	})
+	return trovato
+}
+
+func apriNelBrowser(percorso string) {
+	if err := gui.Open(percorso); err != nil {
+		fmt.Fprintln(os.Stderr, "diskseer: GUI not opened:", err)
+	}
 }
 
 func codiceEsito(findings []rules.Finding) int {
@@ -227,9 +271,9 @@ func percorsoRefertoPredefinito() string {
 //
 // Se l'utente rifiuta la richiesta non si insiste e non ci si ferma: il
 // programma prosegue con quel che riesce a leggere e lo dichiara apertamente
-// nel referto. Una diagnosi parziale vale più di nessuna diagnosi, purché sia
-// dichiarata parziale.
-func chiediPrivilegi(disattivato, modalitaJSON bool) bool {
+// nel referto, e il menu gli offre di riprovare quando vuole. Una diagnosi
+// parziale vale più di nessuna diagnosi, purché sia dichiarata parziale.
+func chiediPrivilegi(disattivato, modalitaJSON bool, l i18n.Lingua) bool {
 	if disattivato || modalitaJSON {
 		return false
 	}
@@ -242,8 +286,10 @@ func chiediPrivilegi(disattivato, modalitaJSON bool) bool {
 		return false
 	}
 
-	fmt.Println("\n  Requesting administrator privileges...")
-	fmt.Println("  They are needed to read the health of SATA and USB drives.")
+	fmt.Printf("\n  %s\n", l.S("Requesting administrator privileges...",
+		"Richiesta dei privilegi di amministratore..."))
+	fmt.Printf("  %s\n", l.S("They are needed to read the health of SATA and USB drives.",
+		"Servono per leggere la salute dei dischi SATA e USB."))
 
 	return elevate.Richiedi(eseguibile, os.Args[1:])
 }
@@ -255,11 +301,15 @@ func chiediPrivilegi(disattivato, modalitaJSON bool) bool {
 // rifarli costerebbe tre secondi a giro contro i tre millisecondi che serve
 // per rileggere temperature, contatori e spazio libero.
 //
+// Lo snapshot arriva per puntatore perché il ciclo lo aggiorna sul posto: chi
+// esce dalla vista dal vivo — il menu, per esempio — si ritrova in mano i
+// valori attuali e non quelli con cui era entrato.
+//
 // Se è stato chiesto anche il referto HTML, viene riscritto a ogni giro: la
 // pagina si ricarica da sola e mostra gli stessi valori del terminale. È il
 // motivo per cui non serve un server locale — il file su disco è già il canale
 // di comunicazione fra i due.
-func ciclaDalVivo(snap model.Snapshot, l i18n.Lingua, colore, ridisegna bool,
+func ciclaDalVivo(snap *model.Snapshot, l i18n.Lingua, colore, ridisegna bool,
 	intervallo time.Duration, percorsoHTML string, opts report.HTMLOptions) int {
 
 	stampante := report.Printer{W: os.Stdout, Color: colore, Lang: l}
@@ -276,13 +326,13 @@ func ciclaDalVivo(snap model.Snapshot, l i18n.Lingua, colore, ridisegna bool,
 	ticchettio := time.NewTicker(intervallo)
 	defer ticchettio.Stop()
 
-	if colore {
+	if ridisegna {
 		fmt.Print("\033[2J") // una pulizia sola all'avvio, poi si ridisegna sul posto
 	}
 
 	for {
-		findings := rules.Run(snap, l)
-		stampante.PrintLive(snap, findings, report.LiveOptions{
+		findings := rules.Run(*snap, l)
+		stampante.PrintLive(*snap, findings, report.LiveOptions{
 			Intervallo: intervallo,
 			Elevato:    snap.Elevated,
 			Ridisegna:  ridisegna,
@@ -291,7 +341,7 @@ func ciclaDalVivo(snap model.Snapshot, l i18n.Lingua, colore, ridisegna bool,
 		if percorsoHTML != "" {
 			// Un referto non scritto non deve fermare il ciclo: la vista a
 			// terminale continua a funzionare, ed è quella che si sta guardando.
-			_ = report.WriteHTMLLive(percorsoHTML, l, snap, findings, opts, intervallo)
+			_ = report.WriteHTMLLive(percorsoHTML, l, *snap, findings, opts, intervallo)
 		}
 
 		select {
@@ -300,7 +350,7 @@ func ciclaDalVivo(snap model.Snapshot, l i18n.Lingua, colore, ridisegna bool,
 			fmt.Println()
 			return codiceEsito(findings)
 		case <-ticchettio.C:
-			collect.Refresh(&snap)
+			collect.Refresh(snap)
 		}
 	}
 }

@@ -33,7 +33,7 @@ func TestAnonimizzaTogliLIdentitaNonLeMisure(t *testing.T) {
 			SMART:       &SMARTData{Attributes: []SMARTAttribute{{ID: 197, Raw: 4}}},
 		}},
 		Volumes:  []Volume{{DriveLetter: "C", FileSystem: "NTFS", SizeBytes: 1000, FreeBytes: 20}},
-		Thermals: []Thermal{{Name: `ACPI\ThermalZone\TZ00_0`, Celsius: 27.9}},
+		Thermals: []Thermal{{Name: `ACPI ThermalZone TZ00_0`, Celsius: 27.9}},
 	}
 
 	s.Anonimizza()
@@ -84,4 +84,38 @@ func TestAnonimizzaTogliLIdentitaNonLeMisure(t *testing.T) {
 				s.Disks[0].Model)
 		}
 	})
+}
+
+// Anonimizzare una copia non deve toccare l'originale.
+//
+// È il presupposto dell'esportazione dal menu: si esporta una versione anonima
+// mentre a schermo resta la diagnosi vera, con marca e modello al loro posto.
+// Senza Clona le due cose sarebbero lo stesso oggetto, e l'esportazione
+// cancellerebbe i dati che l'utente sta guardando.
+func TestAnonimizzareUnaCopiaLasciaStareLOriginale(t *testing.T) {
+	originale := Snapshot{
+		System:   System{Manufacturer: "MARCAFINTA", Model: "MODELLO-XY99"},
+		Disks:    []Disk{{DeviceID: "0", Model: "DISCOFINTO 500", MediaType: "SSD", BusType: "NVMe"}},
+		Thermals: []Thermal{{Name: "ACPI ThermalZone TZ00", Celsius: 42}},
+		Battery:  &Battery{Name: "Batteria Inventata"},
+	}
+
+	copia := originale.Clona()
+	copia.Anonimizza()
+
+	if originale.System.Manufacturer != "MARCAFINTA" {
+		t.Error("la marca dell'originale è stata cancellata dall'anonimizzazione della copia")
+	}
+	if originale.Disks[0].Model != "DISCOFINTO 500" {
+		t.Error("il modello del disco dell'originale è cambiato: la fetta dei dischi è condivisa")
+	}
+	if originale.Thermals[0].Name != "ACPI ThermalZone TZ00" {
+		t.Error("il nome della zona termica dell'originale è cambiato")
+	}
+	if originale.Battery.Name != "Batteria Inventata" {
+		t.Error("il nome della batteria dell'originale è cambiato: il puntatore è condiviso")
+	}
+	if copia.Disks[0].Model == originale.Disks[0].Model {
+		t.Error("la copia non è stata anonimizzata affatto")
+	}
 }

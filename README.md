@@ -37,8 +37,9 @@ knows, and what to do about it.
     before considering replacing the drive.
 ```
 
-Single binary. No installer, no dependencies, no telemetry. Windows. Now with
-an offline graphical dashboard that opens automatically on double-click.
+Single binary. No installer, no dependencies, no telemetry. Windows.
+Double-click opens an interactive menu; the offline graphical dashboard is one
+keystroke away.
 
 **[Download the latest release →](../../releases/latest)**
 
@@ -129,17 +130,48 @@ Go 1.21 or newer. No module dependencies — check `go.mod`, it is four lines.
 
 ## Usage
 
-Double-click it and it does the right thing: asks for administrator rights,
-saves the report next to the executable, and opens the graphical dashboard.
+Double-click it: it asks for administrator rights, prints the diagnosis, and
+then hands you a menu instead of closing.
 
-From a terminal:
+```
+ 1  Live mode                    temperatures and free space, refreshed every 3s
+ 2  Open the report              write an HTML report and open it in the browser
+ 3  Run the diagnosis again      re-read every drive from scratch
+ 4  Drive details                raw SMART and NVMe counters
+ 5  Export the data              anonymised JSON, safe to share
+ 6  Restart as administrator     needed to read SATA and USB drives
+ 7  Settings                     language, refresh rate, report details
+ 8  Close diskseer
+```
+
+Nothing is written to disk unless you ask for it. **Restart as administrator**
+appears only when the run is actually missing privileges, and **Export the data**
+is always anonymised — make, model and timestamps are removed, every
+measurement is kept — so a case can be shared without sharing a customer.
+
+Open the report and then go live, and the page keeps updating too.
+
+### Settings
+
+Stored in `%APPDATA%\diskseer\settings.json`: language, refresh interval, the
+technician and customer details printed on reports, colours, and the folder
+reports are saved to. Options written on the command line always win for that
+run.
+
+Switching language applies immediately and then asks — in the language you just
+picked — whether it should become the default.
+
+### From a terminal
+
+diskseer prints once and exits, so it stays usable inside scripts:
 
 ```
 diskseer                     # full report
 diskseer --lang it           # report in Italian
 diskseer --json              # raw data, for scripts
 diskseer --json --anonymous  # raw data with the machine identity stripped
-diskseer --gui               # open the interactive graphical dashboard
+diskseer --menu              # the interactive menu, without double-clicking
+diskseer --gui               # write the report and open it in the browser
 diskseer --watch             # stay open and refresh the readings live
 diskseer --watch --gui       # live dashboard in the browser, live view in the terminal
 ```
@@ -147,9 +179,8 @@ diskseer --watch --gui       # live dashboard in the browser, live view in the t
 The GUI is fast by design: it is a self-contained local file, not an embedded
 web server. It opens in the default browser, works without internet, sends no
 data anywhere, supports light/dark themes and finding filters, and can save a
-clean PDF from the **Print / save PDF** button. Double-clicking `diskseer.exe`
-launches this interface automatically; terminal usage keeps the text output
-for scripts and remote support.
+clean PDF from the **Print / save PDF** button. It is one entry away in the
+menu; terminal usage keeps the text output for scripts and remote support.
 
 ### Watch mode
 
