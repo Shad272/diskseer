@@ -27,6 +27,13 @@ type HTMLOptions struct {
 	Technician string
 	Contact    string
 	Customer   string
+
+	// Version è la versione del programma, stampata in fondo al referto.
+	//
+	// Arriva da chi chiama invece di stare qui: scritta in due posti si
+	// disallinea alla prima modifica, e il referto finirebbe per dichiarare
+	// una versione diversa da quella che --version stampa. È già successo.
+	Version string
 }
 
 // Il template riceve solo stringhe gia' pronte. Tutta la logica — conversioni,
@@ -202,7 +209,7 @@ func scriviHTML(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Find
 		RicaricaOgni: ricaricaOgni,
 		Logo:         template.URL(logoDataURI()),
 		Lang:         l.S("en", "it"),
-		Version:      "1.1.1",
+		Version:      opts.Version,
 		Data:         time.Now().Format(l.S("2006-01-02 at 15:04", "02/01/2006 alle 15:04")),
 		T:            etichetteDi(l),
 		Opts:         opts,

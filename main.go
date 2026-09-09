@@ -124,7 +124,7 @@ func esegui() (int, bool) {
 	}
 
 	if percorsoHTML != "" {
-		opts := report.HTMLOptions{Technician: *technician, Contact: *contact, Customer: *customer}
+		opts := report.HTMLOptions{Technician: *technician, Contact: *contact, Customer: *customer, Version: version}
 		if err := report.WriteHTMLLang(percorsoHTML, l, snap, findings, opts); err != nil {
 			// Un referto non salvato non deve far perdere la diagnosi appena
 			// fatta: si segnala e si continua a stamparla a schermo.
@@ -139,7 +139,7 @@ func esegui() (int, bool) {
 		if *interval < time.Second {
 			*interval = time.Second
 		}
-		opts := report.HTMLOptions{Technician: *technician, Contact: *contact, Customer: *customer}
+		opts := report.HTMLOptions{Technician: *technician, Contact: *contact, Customer: *customer, Version: version}
 		if lancioGrafico && percorsoHTML != "" {
 			if err := gui.Open(percorsoHTML); err != nil {
 				fmt.Fprintln(os.Stderr, "diskseer: GUI not opened:", err)

@@ -99,3 +99,32 @@ func TestIFiltriNascondonoDavveroIVerdetti(t *testing.T) {
 			"display dichiarato nella pagina prevale su quello del browser")
 	}
 }
+
+// La versione stampata sul referto deve essere quella che le viene passata,
+// non una costante scritta qui dentro.
+//
+// Nasce da un errore vero: la versione era scritta in due posti, un
+// aggiornamento ne ha toccato uno solo, e il referto ha dichiarato per un
+// commit una versione diversa da quella che il programma stampava.
+func TestIlRefertoDichiaraLaVersioneRicevuta(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "snapshot-completo.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snap model.Snapshot
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "report.html")
+	opts := HTMLOptions{Version: "9.9.9-prova"}
+	if err := WriteHTMLLang(path, i18n.EN, snap, rules.Run(snap, i18n.EN), opts); err != nil {
+		t.Fatal(err)
+	}
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "9.9.9-prova") {
+		t.Error("il referto non riporta la versione che gli è stata passata")
+	}
+}
