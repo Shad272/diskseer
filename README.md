@@ -164,8 +164,10 @@ picked — whether it should become the default.
 ### Old consoles
 
 Bullets, arrows, bars, the degree sign and the disc in the banner are drawn with
-characters that a console using a raster font cannot display — they come out as
-empty boxes, and `84 °C` becomes `84 ▫▫` on the one line you most need to read.
+characters some Windows consoles will not display — they come out as empty
+boxes, and `84 °C` becomes `84 ▫▫` on the one line you most need to read. This
+happens on a machine whose console reports a TrueType font and a UTF-8 code
+page, so neither of those is worth trusting.
 
 There is no way to ask a console which characters it can draw, so diskseer asks
 a question it *can* answer: does this terminal announce itself? Windows Terminal,
