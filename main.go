@@ -124,7 +124,18 @@ func esegui() int {
 		return 0
 	}
 
+	// La rotella gira solo se c'è uno schermo a guardarla. Con l'uscita
+	// rediretta su file i ritorni a capo lascerebbero una scia di rotelle
+	// sovrapposte dentro il file, e in modalità JSON romperebbero il formato.
+	var attesa *report.Attesa
+	if ansiOK && !*asJSON {
+		attesa = report.Printer{W: uscita, Color: colore, Lang: l}.
+			Attendi(l.S("loading", "caricamento"))
+	}
+
 	snap, err := collect.Collect()
+	attesa.Ferma()
+
 	if err != nil && !modalitaMenu {
 		fmt.Fprintln(os.Stderr, "diskseer: data collection failed:", err)
 		return 3
