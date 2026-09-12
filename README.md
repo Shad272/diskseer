@@ -167,11 +167,31 @@ Bullets, arrows, bars, the degree sign and the disc in the banner are drawn with
 characters that a console using a raster font cannot display — they come out as
 empty boxes, and `84 °C` becomes `84 ▫▫` on the one line you most need to read.
 
-diskseer checks the console font and falls back to plain characters on its own
-when that is the case. The report stays identical in substance: `*` for bullets,
-`->` for actions, `#` for bars, and a disc drawn with `#` `-` `_` that is still
-a disc. Force it with `--ascii`, or from **Settings → Symbols** when a console
-claims it can draw them and then doesn't.
+There is no way to ask a console which characters it can draw, so diskseer asks
+a question it *can* answer: does this terminal announce itself? Windows Terminal,
+ConEmu, an editor's built-in terminal and every Unix one set an environment
+variable saying they are there — and the ones that do, draw everything. The
+classic Windows console announces nothing, and there diskseer plays safe.
+
+The report stays identical in substance: `*` for bullets, `->` for actions, `#`
+for bars, `30C` for temperatures, and a disc drawn with `#` `-` `_` that is
+still a disc.
+
+```
+        __########__         ___ ___ ___ _  _____ ___ ___ ___
+      _##############_      |   \_ _/ __| |/ / __| __| __| _ \
+     _################_     | |) | |\__ \ ' <\__ \ _|| _||   /
+     #######-##-#######     |___/___|___/_|\_\___/___|___|_|_\
+     ##################               __           __
+     #######_##_#######               ##           ##
+     -################-               ##           ##
+      -##############-      -----------##-----------##--------
+        --########--                   --           --
+```
+
+Both directions are overridable, because the guess can be wrong either way:
+`--ascii` forces plain, `--unicode` forces the decorated characters, and
+**Settings → Symbols** cycles automatic / full / plain and remembers the choice.
 
 ### From a terminal
 
@@ -184,6 +204,7 @@ diskseer --json              # raw data, for scripts
 diskseer --json --anonymous  # raw data with the machine identity stripped
 diskseer --menu              # the interactive menu, without double-clicking
 diskseer --ascii             # plain characters, for consoles that cannot draw the rest
+diskseer --unicode           # the decorated characters, even in an unrecognised console
 diskseer --gui               # write the report and open it in the browser
 diskseer --watch             # stay open and refresh the readings live
 diskseer --watch --gui       # live dashboard in the browser, live view in the terminal

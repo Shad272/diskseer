@@ -98,3 +98,61 @@ func TestIntervalliAssurdiTornanoAlPredefinito(t *testing.T) {
 		}
 	}
 }
+
+// I tre stati dei simboli.
+//
+// Il valore "auto" delega al riconoscimento del terminale; gli altri due lo
+// scavalcano nelle due direzioni opposte. Un valore che non si riconosce vale
+// "auto": un refuso in un file scritto a mano non deve produrre un
+// comportamento che nessuno riesce a spiegarsi.
+func TestITreStatiDeiSimboli(t *testing.T) {
+	casi := []struct {
+		symbols      string
+		consolaRicca bool
+		vuolePiani   bool
+	}{
+		{SimboliAuto, true, false},
+		{SimboliAuto, false, true},
+		{SimboliRicchi, false, false},
+		{SimboliRicchi, true, false},
+		{SimboliPiani, true, true},
+		{SimboliPiani, false, true},
+		{"", true, false},
+		{"", false, true},
+		{"banana", true, false},
+		{"banana", false, true},
+	}
+	for _, c := range casi {
+		got := Config{Symbols: c.symbols}.Piani(c.consolaRicca)
+		if got != c.vuolePiani {
+			t.Errorf("Symbols=%q consolaRicca=%v: piani=%v, atteso %v",
+				c.symbols, c.consolaRicca, got, c.vuolePiani)
+		}
+	}
+}
+
+// La rotazione deve passare per tutti e tre gli stati e tornare al punto di
+// partenza: un ciclo che ne salta uno rende irraggiungibile un'impostazione
+// dal menu.
+func TestProssimiSimboliGiraSuTuttiETre(t *testing.T) {
+	visti := map[string]bool{}
+	stato := SimboliAuto
+	for i := 0; i < 3; i++ {
+		visti[stato] = true
+		stato = ProssimiSimboli(stato)
+	}
+	if stato != SimboliAuto {
+		t.Errorf("dopo tre passi si è a %q invece che di nuovo su %q", stato, SimboliAuto)
+	}
+	for _, atteso := range []string{SimboliAuto, SimboliRicchi, SimboliPiani} {
+		if !visti[atteso] {
+			t.Errorf("lo stato %q non è raggiungibile ruotando", atteso)
+		}
+	}
+}
+
+func TestIPredefinitiScelgonoIlRiconoscimentoAutomatico(t *testing.T) {
+	if c := Predefinite(); c.Symbols != SimboliAuto {
+		t.Errorf("Symbols predefinito = %q, atteso %q", c.Symbols, SimboliAuto)
+	}
+}

@@ -32,11 +32,15 @@ type Config struct {
 	Customer   string `json:"customer,omitempty"`
 	Colors     bool   `json:"colors"`
 
-	// PlainSymbols forza i caratteri semplici anche dove la console saprebbe
-	// disegnare gli altri. Serve a chi ha un terminale che dichiara di saperli
-	// fare e poi non li fa: il riconoscimento automatico guarda il font, e un
-	// font puo' mentire.
-	PlainSymbols bool `json:"plainSymbols,omitempty"`
+	// Symbols vale "auto", "full" o "plain".
+	//
+	// Tre stati e non due perche' il riconoscimento automatico puo' sbagliare in
+	// entrambe le direzioni: c'e' la console classica di Windows che non disegna
+	// i caratteri decorativi, e c'e' quella che li disegna benissimo e si vede
+	// comunque offrire la versione essenziale, perche' non ha modo di
+	// annunciarsi. Con due soli stati una delle due categorie resta senza
+	// rimedio.
+	Symbols string `json:"symbols"`
 
 	// ReportDir vuoto significa "accanto all'eseguibile", che è dove chi lancia
 	// il programma con un doppio clic si aspetta di trovare i file.
@@ -46,7 +50,42 @@ type Config struct {
 // Predefinite descrive un diskseer appena installato: inglese, tre secondi,
 // colori accesi.
 func Predefinite() Config {
-	return Config{Language: "en", Interval: "3s", Colors: true}
+	return Config{Language: "en", Interval: "3s", Colors: true, Symbols: SimboliAuto}
+}
+
+// I tre valori di Symbols.
+const (
+	SimboliAuto   = "auto"  // decide il programma, guardando il terminale
+	SimboliRicchi = "full"  // sempre i caratteri decorativi
+	SimboliPiani  = "plain" // sempre la versione essenziale
+)
+
+// Piani dice se stampare con i soli caratteri essenziali, dato il verdetto del
+// riconoscimento automatico.
+//
+// Un valore che non riconosce vale "auto": un file scritto a mano con un
+// refuso non deve cambiare il comportamento in modo inspiegabile.
+func (c Config) Piani(consolaRicca bool) bool {
+	switch c.Symbols {
+	case SimboliPiani:
+		return true
+	case SimboliRicchi:
+		return false
+	default:
+		return !consolaRicca
+	}
+}
+
+// ProssimiSimboli ruota fra i tre stati, per il menu.
+func ProssimiSimboli(attuale string) string {
+	switch attuale {
+	case SimboliRicchi:
+		return SimboliPiani
+	case SimboliPiani:
+		return SimboliAuto
+	default:
+		return SimboliRicchi
+	}
 }
 
 // Percorso indica dove vivono le impostazioni.

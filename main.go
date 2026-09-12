@@ -56,6 +56,7 @@ func esegui() int {
 		interval    = flag.Duration("interval", 3*time.Second, "how often to refresh in watch mode (minimum 1s)")
 		showMenu    = flag.Bool("menu", false, "show the interactive menu instead of printing the report once")
 		plain       = flag.Bool("ascii", false, "use plain characters only, for consoles that cannot draw the rest")
+		unicode     = flag.Bool("unicode", false, "use the decorated characters even if the console was not recognised")
 	)
 	flag.Parse()
 
@@ -96,11 +97,18 @@ func esegui() int {
 	l := i18n.Da(cfg.Language)
 	colore := ansiOK && coloriConsentiti && cfg.Colors
 
-	// I caratteri semplici scattano da soli quando la console non sa disegnare
-	// gli altri. Restano comunque due modi per chiederli a mano: c'è chi ha un
-	// terminale che dichiara di saperli fare e poi mostra quadratini, e nessun
-	// riconoscimento automatico lo indovina.
-	piano := *plain || cfg.PlainSymbols || !report.ConsolaDisegnaSimboli()
+	// La scelta dei caratteri ha tre livelli, dal più immediato al più lontano:
+	// l'opzione scritta adesso, l'impostazione salvata, e in mancanza di
+	// entrambe il riconoscimento del terminale. Le opzioni sono due e opposte
+	// perché il riconoscimento può sbagliare in due direzioni.
+	consolaRicca := report.ConsolaDisegnaSimboli()
+	piano := cfg.Piani(consolaRicca)
+	if *plain {
+		piano = true
+	}
+	if *unicode {
+		piano = false
+	}
 	uscita := report.Uscita(os.Stdout, piano)
 
 	if !*asJSON {
@@ -160,8 +168,9 @@ func esegui() int {
 			lingua:           l,
 			ansi:             ansiOK,
 			coloriConsentiti: coloriConsentiti,
-			consolaRicca:     report.ConsolaDisegnaSimboli(),
+			consolaRicca:     consolaRicca,
 			pianoDaFlag:      *plain,
+			riccoDaFlag:      *unicode,
 
 			// Il flusso grezzo, non quello già confezionato: dal menu si può
 			// cambiare l'impostazione dei caratteri, e la scelta deve valere

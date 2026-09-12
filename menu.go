@@ -58,10 +58,12 @@ type sessione struct {
 	ansi             bool
 	coloriConsentiti bool
 
-	// consolaRicca e pianoDaFlag decidono, insieme all'impostazione salvata,
-	// se stampare i caratteri decorativi o le loro versioni essenziali.
+	// consolaRicca è il verdetto del riconoscimento automatico; le due bandiere
+	// sono le opzioni con cui l'utente lo scavalca in una direzione o
+	// nell'altra, solo per questa esecuzione.
 	consolaRicca bool
 	pianoDaFlag  bool
+	riccoDaFlag  bool
 
 	// grezzo e' lo schermo vero. L'uscita usata per stampare ci viene
 	// costruita sopra a ogni chiamata, perche' dal menu si puo' cambiare
@@ -81,7 +83,16 @@ type sessione struct {
 func (s *sessione) colore() bool { return s.ansi && s.coloriConsentiti && s.cfg.Colors }
 
 // piano dice se stampare con i soli caratteri essenziali.
-func (s *sessione) piano() bool { return s.pianoDaFlag || s.cfg.PlainSymbols || !s.consolaRicca }
+func (s *sessione) piano() bool {
+	switch {
+	case s.pianoDaFlag:
+		return true
+	case s.riccoDaFlag:
+		return false
+	default:
+		return s.cfg.Piani(s.consolaRicca)
+	}
+}
 
 func (s *sessione) out() io.Writer { return report.Uscita(s.grezzo, s.piano()) }
 

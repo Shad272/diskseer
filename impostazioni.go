@@ -46,7 +46,7 @@ func apriImpostazioni(s *sessione) bool {
 		case "7":
 			s.cambiaCartella()
 		case "8":
-			s.cfg.PlainSymbols = !s.cfg.PlainSymbols
+			s.cfg.Symbols = settings.ProssimiSimboli(s.cfg.Symbols)
 			s.salvaImpostazioni()
 		default:
 			fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Dim,
@@ -125,15 +125,17 @@ func (s *sessione) doveSonoSalvate() string {
 // la sua console a non saperli disegnare, e che si può forzare il contrario.
 func (s *sessione) descriviSimboli() string {
 	l := s.lingua
-	switch {
-	case s.cfg.PlainSymbols:
-		return l.S("plain text", "solo testo")
-	case !s.consolaRicca:
-		return l.S("plain text (this console cannot draw the rest)",
-			"solo testo (questa console non sa disegnare il resto)")
-	default:
-		return l.S("full", "completi")
+	switch s.cfg.Symbols {
+	case settings.SimboliPiani:
+		return l.S("plain text (chosen)", "solo testo (scelto)")
+	case settings.SimboliRicchi:
+		return l.S("full (chosen)", "completi (scelto)")
 	}
+	if s.consolaRicca {
+		return l.S("full (automatic)", "completi (automatico)")
+	}
+	return l.S("plain text - this console was not recognised",
+		"solo testo - questa console non e' stata riconosciuta")
 }
 
 func oppure(valore, seVuoto string) string {

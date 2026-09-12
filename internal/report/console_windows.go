@@ -3,6 +3,7 @@
 package report
 
 import (
+	"os"
 	"syscall"
 	"unsafe"
 )
@@ -47,54 +48,60 @@ func PrepareConsole() bool {
 	return r != 0
 }
 
-var procGetCurrentConsoleFontEx = kernel32.NewProc("GetCurrentConsoleFontEx")
-
-// tmpfTrueType è il bit che nella famiglia di un font dice "questo è un font
-// vettoriale". I font raster della console — il vecchio "Terminal" — non ce
-// l'hanno, e sono quelli che non sanno disegnare nulla fuori dall'alfabeto.
-const tmpfTrueType = 0x04
-
-// consoleFontInfoEx ricalca CONSOLE_FONT_INFOEX di Windows.
+// ConsolaDisegnaSimboli dice se conviene usare i caratteri decorativi del
+// referto: pallini, frecce, barre, il grado delle temperature, i mezzi blocchi
+// del banner.
 //
-// La dimensione dichiarata in cbSize deve corrispondere esattamente a quella
-// che si aspetta il sistema: è così che l'API distingue questa struttura dalle
-// versioni precedenti. Gli 84 byte tornano perché i due int16 di COORD
-// riempiono da soli un allineamento a quattro.
-type consoleFontInfoEx struct {
-	cbSize     uint32
-	nFont      uint32
-	dimX       int16
-	dimY       int16
-	fontFamily uint32
-	fontWeight uint32
-	faceName   [32]uint16
-}
-
-// ConsolaDisegnaSimboli dice se la console può disegnare i caratteri
-// decorativi del referto.
+// La domanda vera sarebbe "questo font contiene quei caratteri?", e non esiste
+// un modo di chiederlo. Il primo tentativo guardava se il font della console
+// fosse vettoriale o raster, sul presupposto che un font vettoriale li
+// disegnasse tutti. Il presupposto e' falso, e l'ha smentito una macchina vera:
+// console con font Consolas, vettoriale, codepage UTF-8, e il simbolo del grado
+// che esce come due quadratini.
 //
-// La domanda vera sarebbe "questo font contiene il pallino e il grado?", ma
-// non esiste un modo semplice di chiederlo. Esiste però la domanda che nella
-// pratica coincide: il font è vettoriale o raster? I font raster della console
-// di Windows coprono un alfabeto e basta, e sono la ragione per cui su una
-// macchina vecchia il referto esce pieno di quadratini.
+// Quindi si e' ribaltato il criterio. Invece di cercare la prova che la console
+// NON sappia disegnare, si cerca la prova che sappia: un terminale moderno si
+// annuncia da solo con una variabile d'ambiente, e quelli che si annunciano
+// disegnano tutto. La console classica di Windows non si annuncia, e su quella
+// si sta prudenti.
 //
-// Nel dubbio si risponde di sì. Se l'uscita non è una console — rediretta su
-// file, o dentro una pipe — i caratteri finiscono in un file UTF-8 dove si
-// leggono benissimo, e impoverirli sarebbe un danno gratuito.
+// Il caso dell'uscita rediretta e' l'opposto: i caratteri finiscono in un file
+// UTF-8 dove si leggono benissimo, e impoverirli sarebbe un danno gratuito.
 func ConsolaDisegnaSimboli() bool {
+	if terminaleCheSiAnnuncia() {
+		return true
+	}
+
 	h, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
 	if err != nil {
 		return true
 	}
-
-	var info consoleFontInfoEx
-	info.cbSize = uint32(unsafe.Sizeof(info))
-	r, _, _ := procGetCurrentConsoleFontEx.Call(uintptr(h), 0, uintptr(unsafe.Pointer(&info)))
-	if r == 0 {
+	var mode uint32
+	if r, _, _ := procGetConsoleMode.Call(uintptr(h), uintptr(unsafe.Pointer(&mode))); r == 0 {
+		// Non e' una console: e' un file o una pipe.
 		return true
 	}
-	return info.fontFamily&tmpfTrueType != 0
+
+	// Console classica di Windows, che non dichiara nulla di se'.
+	return false
+}
+
+// terminaleCheSiAnnuncia riconosce i terminali che dicono di esserci.
+//
+// Nessuna di queste variabili la mette la console classica di Windows: e' il
+// motivo per cui funzionano come riconoscimento. WT_SESSION la scrive Terminale
+// di Windows, ConEmuANSI ConEmu, TERM_PROGRAM gli editor che ospitano un
+// terminale, TERM e ANSICON il mondo Unix e i suoi portati su Windows.
+func terminaleCheSiAnnuncia() bool {
+	for _, nome := range []string{
+		"WT_SESSION", "WT_PROFILE_ID", "ConEmuANSI",
+		"TERM_PROGRAM", "TERM", "ANSICON",
+	} {
+		if os.Getenv(nome) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 var procGetConsoleProcessList = kernel32.NewProc("GetConsoleProcessList")
