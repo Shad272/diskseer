@@ -35,6 +35,11 @@ var versionePiana = strings.NewReplacer(
 	// vezzo: sono sparsi dentro le frasi dei verdetti, ed è il collaudo ad
 	// averli trovati, non la memoria di chi scrive.
 	"─", "-",
+	"╭", "+",
+	"╮", "+",
+	"╰", "+",
+	"╯", "+",
+	"│", "|",
 	"—", "-",
 	"–", "-",
 	"·", "-",

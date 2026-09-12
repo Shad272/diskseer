@@ -20,6 +20,7 @@ const (
 	dim    = "\033[2m"
 	red    = "\033[31m"
 	yellow = "\033[33m"
+	orange = "\033[38;5;208m"
 	green  = "\033[32m"
 	blue   = "\033[36m"
 )
