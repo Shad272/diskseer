@@ -55,6 +55,7 @@ func esegui() int {
 		watch       = flag.Bool("watch", false, "keep running and refresh the readings continuously")
 		interval    = flag.Duration("interval", 3*time.Second, "how often to refresh in watch mode (minimum 1s)")
 		showMenu    = flag.Bool("menu", false, "show the interactive menu instead of printing the report once")
+		plain       = flag.Bool("ascii", false, "use plain characters only, for consoles that cannot draw the rest")
 	)
 	flag.Parse()
 
@@ -95,8 +96,15 @@ func esegui() int {
 	l := i18n.Da(cfg.Language)
 	colore := ansiOK && coloriConsentiti && cfg.Colors
 
+	// I caratteri semplici scattano da soli quando la console non sa disegnare
+	// gli altri. Restano comunque due modi per chiederli a mano: c'è chi ha un
+	// terminale che dichiara di saperli fare e poi mostra quadratini, e nessun
+	// riconoscimento automatico lo indovina.
+	piano := *plain || cfg.PlainSymbols || !report.ConsolaDisegnaSimboli()
+	uscita := report.Uscita(os.Stdout, piano)
+
 	if !*asJSON {
-		fmt.Print(report.Banner(colore))
+		fmt.Fprint(uscita, report.Banner(colore))
 	}
 
 	// Il menu compare solo quando c'è una persona davanti: con un doppio clic,
@@ -132,7 +140,7 @@ func esegui() int {
 	}
 
 	findings := rules.Run(snap, l)
-	stampante := report.Printer{W: os.Stdout, Color: colore, Lang: l}
+	stampante := report.Printer{W: uscita, Color: colore, Lang: l}
 
 	// Modalità interattiva: si mostra la diagnosi e poi si lascia decidere.
 	//
@@ -152,7 +160,13 @@ func esegui() int {
 			lingua:           l,
 			ansi:             ansiOK,
 			coloriConsentiti: coloriConsentiti,
+			consolaRicca:     report.ConsolaDisegnaSimboli(),
+			pianoDaFlag:      *plain,
 
+			// Il flusso grezzo, non quello già confezionato: dal menu si può
+			// cambiare l'impostazione dei caratteri, e la scelta deve valere
+			// subito invece che al riavvio successivo.
+			grezzo:         os.Stdout,
 			in:             bufio.NewReader(os.Stdin),
 			erroreRaccolta: err,
 		})
@@ -184,7 +198,7 @@ func esegui() int {
 		if *showGUI && percorsoHTML != "" {
 			apriNelBrowser(percorsoHTML)
 		}
-		return ciclaDalVivo(&snap, l, colore, ansiOK, cfg.Durata(), percorsoHTML, opts)
+		return ciclaDalVivo(stampante, &snap, ansiOK, cfg.Durata(), percorsoHTML, opts)
 	}
 
 	stampante.Print(snap, findings)
@@ -309,11 +323,11 @@ func chiediPrivilegi(disattivato, modalitaJSON bool, l i18n.Lingua) bool {
 // pagina si ricarica da sola e mostra gli stessi valori del terminale. È il
 // motivo per cui non serve un server locale — il file su disco è già il canale
 // di comunicazione fra i due.
-func ciclaDalVivo(snap *model.Snapshot, l i18n.Lingua, colore, ridisegna bool,
+func ciclaDalVivo(stampante report.Printer, snap *model.Snapshot, ridisegna bool,
 	intervallo time.Duration, percorsoHTML string, opts report.HTMLOptions) int {
 
-	stampante := report.Printer{W: os.Stdout, Color: colore, Lang: l}
-	ripristina := report.PrepareLive(os.Stdout, ridisegna)
+	l := stampante.Lang
+	ripristina := report.PrepareLive(stampante.W, ridisegna)
 	defer ripristina()
 
 	// Ctrl+C non deve limitarsi a terminare il processo: il cursore è stato
@@ -347,7 +361,7 @@ func ciclaDalVivo(snap *model.Snapshot, l i18n.Lingua, colore, ridisegna bool,
 		select {
 		case <-interruzione:
 			ripristina()
-			fmt.Println()
+			fmt.Fprintln(stampante.W)
 			return codiceEsito(findings)
 		case <-ticchettio.C:
 			collect.Refresh(snap)

@@ -28,7 +28,7 @@ func apriImpostazioni(s *sessione) bool {
 			return true // ingresso chiuso: si chiude tutto, non solo questo menu
 		}
 		switch strings.ToLower(scelta) {
-		case "", "0", "8", "q", "b":
+		case "", "0", "9", "q", "b":
 			return false
 		case "1":
 			s.cambiaLingua()
@@ -45,9 +45,12 @@ func apriImpostazioni(s *sessione) bool {
 			s.salvaImpostazioni()
 		case "7":
 			s.cambiaCartella()
+		case "8":
+			s.cfg.PlainSymbols = !s.cfg.PlainSymbols
+			s.salvaImpostazioni()
 		default:
-			fmt.Printf("  %s\n", s.stampante().C(report.Dim,
-				s.lingua.S("type a number between 1 and 8", "digita un numero fra 1 e 8")))
+			fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Dim,
+				s.lingua.S("type a number between 1 and 9", "digita un numero fra 1 e 9")))
 		}
 	}
 }
@@ -81,6 +84,7 @@ func (s *sessione) righeImpostazioni() []rigaImpostazione {
 		{l.S("Customer", "Cliente"), oppure(s.cfg.Customer, nonImpostato)},
 		{l.S("Colours", "Colori"), acceso},
 		{l.S("Report folder", "Cartella dei referti"), cartella},
+		{l.S("Symbols", "Simboli"), s.descriviSimboli()},
 	}
 }
 
@@ -88,16 +92,16 @@ func (s *sessione) mostraImpostazioni() {
 	p := s.stampante()
 	l := s.lingua
 
-	fmt.Println()
-	fmt.Printf("  %s\n\n", p.C(report.Bold, l.S("SETTINGS", "IMPOSTAZIONI")))
+	fmt.Fprintln(s.out())
+	fmt.Fprintf(s.out(), "  %s\n\n", p.C(report.Bold, l.S("SETTINGS", "IMPOSTAZIONI")))
 
 	for i, r := range s.righeImpostazioni() {
-		fmt.Printf("   %s  %-*s %s\n", p.C(report.Bold, fmt.Sprint(i+1)), larghezzaVoce, r.etichetta, r.valore)
+		fmt.Fprintf(s.out(), "   %s  %-*s %s\n", p.C(report.Bold, fmt.Sprint(i+1)), larghezzaVoce, r.etichetta, r.valore)
 	}
-	fmt.Printf("   %s  %s\n", p.C(report.Bold, "8"), l.S("Back", "Indietro"))
+	fmt.Fprintf(s.out(), "   %s  %s\n", p.C(report.Bold, "8"), l.S("Back", "Indietro"))
 
-	fmt.Printf("\n  %s\n", p.C(report.Dim, s.doveSonoSalvate()))
-	fmt.Println()
+	fmt.Fprintf(s.out(), "\n  %s\n", p.C(report.Dim, s.doveSonoSalvate()))
+	fmt.Fprintln(s.out())
 }
 
 // doveSonoSalvate dice all'utente quale file stiamo scrivendo. Un programma che
@@ -113,6 +117,25 @@ func (s *sessione) doveSonoSalvate() string {
 	return l.F("Settings file: %s", "File delle impostazioni: %s", percorso)
 }
 
+// descriviSimboli dice quali caratteri si stanno usando e, quando sono quelli
+// essenziali senza che l'utente li abbia chiesti, perché.
+//
+// Serve a non far sembrare un difetto una scelta: chi vede un referto con gli
+// asterischi al posto dei pallini deve poter capire in un colpo d'occhio che è
+// la sua console a non saperli disegnare, e che si può forzare il contrario.
+func (s *sessione) descriviSimboli() string {
+	l := s.lingua
+	switch {
+	case s.cfg.PlainSymbols:
+		return l.S("plain text", "solo testo")
+	case !s.consolaRicca:
+		return l.S("plain text (this console cannot draw the rest)",
+			"solo testo (questa console non sa disegnare il resto)")
+	default:
+		return l.S("full", "completi")
+	}
+}
+
 func oppure(valore, seVuoto string) string {
 	if strings.TrimSpace(valore) == "" {
 		return seVuoto
@@ -125,8 +148,8 @@ func oppure(valore, seVuoto string) string {
 // La domanda arriva già nella lingua appena scelta: è la conferma immediata che
 // il cambio ha avuto effetto, prima ancora che l'utente risponda.
 func (s *sessione) cambiaLingua() {
-	fmt.Println()
-	fmt.Printf("   1  English\n   2  Italiano\n\n")
+	fmt.Fprintln(s.out())
+	fmt.Fprintf(s.out(), "   1  English\n   2  Italiano\n\n")
 
 	scelta, ok := s.leggi("  > ")
 	if !ok {
@@ -151,7 +174,7 @@ func (s *sessione) cambiaLingua() {
 		s.salvaImpostazioni()
 		return
 	}
-	fmt.Printf("  %s\n", s.stampante().C(report.Dim, s.lingua.S(
+	fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Dim, s.lingua.S(
 		"Kept for this session only.", "Vale solo per questa sessione.")))
 }
 
@@ -171,7 +194,7 @@ func (s *sessione) cambiaIntervallo() {
 	}
 	d, err := time.ParseDuration(risposta)
 	if err != nil || d < time.Second {
-		fmt.Printf("  %s\n", l.S("Not a valid interval: one second is the minimum.",
+		fmt.Fprintf(s.out(), "  %s\n", l.S("Not a valid interval: one second is the minimum.",
 			"Intervallo non valido: il minimo è un secondo."))
 		return
 	}
@@ -182,7 +205,7 @@ func (s *sessione) cambiaIntervallo() {
 func (s *sessione) cambiaTesto(campo *string, etichetta string) {
 	l := s.lingua
 
-	fmt.Printf("\n  %s\n", s.stampante().C(report.Dim, l.S(
+	fmt.Fprintf(s.out(), "\n  %s\n", s.stampante().C(report.Dim, l.S(
 		"ENTER to leave it as it is, - to clear it.",
 		"INVIO per lasciarlo com'è, - per cancellarlo.")))
 
@@ -201,7 +224,7 @@ func (s *sessione) cambiaTesto(campo *string, etichetta string) {
 func (s *sessione) cambiaCartella() {
 	l := s.lingua
 
-	fmt.Printf("\n  %s\n", s.stampante().C(report.Dim, l.S(
+	fmt.Fprintf(s.out(), "\n  %s\n", s.stampante().C(report.Dim, l.S(
 		"ENTER to leave it as it is, - to go back to the folder holding diskseer.exe.",
 		"INVIO per lasciarla com'è, - per tornare alla cartella di diskseer.exe.")))
 
@@ -219,7 +242,7 @@ func (s *sessione) cambiaCartella() {
 	// battitura scoperto qui costa una riga, scoperto dopo costa una diagnosi.
 	info, err := os.Stat(risposta)
 	if err != nil || !info.IsDir() {
-		fmt.Printf("  %s\n", l.S("That folder does not exist.", "Quella cartella non esiste."))
+		fmt.Fprintf(s.out(), "  %s\n", l.S("That folder does not exist.", "Quella cartella non esiste."))
 		return
 	}
 	s.cfg.ReportDir = risposta
@@ -233,8 +256,8 @@ func (s *sessione) salvaImpostazioni() {
 	if err != nil {
 		// Non salvare è un fastidio, non un guasto: la sessione in corso
 		// funziona lo stesso con le impostazioni appena cambiate.
-		fmt.Printf("  %s %v\n", l.S("Settings not saved:", "Impostazioni non salvate:"), err)
+		fmt.Fprintf(s.out(), "  %s %v\n", l.S("Settings not saved:", "Impostazioni non salvate:"), err)
 		return
 	}
-	fmt.Printf("  %s %s\n", s.stampante().C(report.Green, l.S("Saved in", "Salvate in")), percorso)
+	fmt.Fprintf(s.out(), "  %s %s\n", s.stampante().C(report.Green, l.S("Saved in", "Salvate in")), percorso)
 }

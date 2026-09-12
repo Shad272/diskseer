@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,6 +58,16 @@ type sessione struct {
 	ansi             bool
 	coloriConsentiti bool
 
+	// consolaRicca e pianoDaFlag decidono, insieme all'impostazione salvata,
+	// se stampare i caratteri decorativi o le loro versioni essenziali.
+	consolaRicca bool
+	pianoDaFlag  bool
+
+	// grezzo e' lo schermo vero. L'uscita usata per stampare ci viene
+	// costruita sopra a ogni chiamata, perche' dal menu si puo' cambiare
+	// l'impostazione dei caratteri e il cambio deve vedersi subito.
+	grezzo io.Writer
+
 	in *bufio.Reader
 
 	// referto è l'ultimo file HTML scritto in questa sessione. La modalità dal
@@ -69,8 +80,13 @@ type sessione struct {
 
 func (s *sessione) colore() bool { return s.ansi && s.coloriConsentiti && s.cfg.Colors }
 
+// piano dice se stampare con i soli caratteri essenziali.
+func (s *sessione) piano() bool { return s.pianoDaFlag || s.cfg.PlainSymbols || !s.consolaRicca }
+
+func (s *sessione) out() io.Writer { return report.Uscita(s.grezzo, s.piano()) }
+
 func (s *sessione) stampante() report.Printer {
-	return report.Printer{W: os.Stdout, Color: s.colore(), Lang: s.lingua}
+	return report.Printer{W: s.out(), Color: s.colore(), Lang: s.lingua}
 }
 
 // ricalcola rifà i verdetti sui dati già in memoria.
@@ -106,10 +122,10 @@ func (s *sessione) percorsoAccanto(nome string) string {
 // più niente da leggere: succede se l'ingresso è un file invece di una
 // tastiera, e senza questo controllo il menu girerebbe a vuoto per sempre.
 func (s *sessione) leggi(prompt string) (string, bool) {
-	fmt.Print(prompt)
+	fmt.Fprint(s.out(), prompt)
 	riga, err := s.in.ReadString('\n')
 	if err != nil && strings.TrimSpace(riga) == "" {
-		fmt.Println()
+		fmt.Fprintln(s.out())
 		return "", false
 	}
 	return strings.TrimSpace(riga), true
@@ -206,7 +222,7 @@ func eseguiMenu(s *sessione) int {
 
 		i, err := indiceVoce(scelta, len(voci))
 		if err != nil {
-			fmt.Printf("  %s\n", s.stampante().C(report.Dim, s.lingua.F(
+			fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Dim, s.lingua.F(
 				"type a number between 1 and %d", "digita un numero fra 1 e %d", len(voci))))
 			continue
 		}
@@ -237,31 +253,31 @@ func (s *sessione) mostra(voci []voce) {
 	l := s.lingua
 	riga := strings.Repeat("─", 74)
 
-	fmt.Println()
-	fmt.Printf("  %s\n", p.C(report.Dim, riga))
+	fmt.Fprintln(s.out())
+	fmt.Fprintf(s.out(), "  %s\n", p.C(report.Dim, riga))
 
 	if s.erroreRaccolta != nil {
-		fmt.Printf("  %s  %v\n", p.C(report.Bold+report.Red,
+		fmt.Fprintf(s.out(), "  %s  %v\n", p.C(report.Bold+report.Red,
 			l.S("COLLECTION FAILED", "RACCOLTA FALLITA")), s.erroreRaccolta)
 	} else {
 		complessivo := rules.Overall(s.findings)
-		fmt.Printf("  %s  %s\n",
+		fmt.Fprintf(s.out(), "  %s  %s\n",
 			p.C(report.Bold+p.SevColor(complessivo), "● "+complessivo.Label(l)),
 			report.Summary(l, s.findings))
 	}
 
 	if !s.snap.Elevated {
-		fmt.Printf("  %s  %s\n", p.C(report.Bold+report.Yellow,
+		fmt.Fprintf(s.out(), "  %s  %s\n", p.C(report.Bold+report.Yellow,
 			l.S("PARTIAL DIAGNOSIS", "DIAGNOSI PARZIALE")),
 			l.S("run without administrator privileges", "eseguita senza privilegi di amministratore"))
 	}
-	fmt.Printf("  %s\n\n", p.C(report.Dim, riga))
+	fmt.Fprintf(s.out(), "  %s\n\n", p.C(report.Dim, riga))
 
 	for i, v := range voci {
-		fmt.Printf("   %s  %-*s %s\n", p.C(report.Bold, fmt.Sprint(i+1)),
+		fmt.Fprintf(s.out(), "   %s  %-*s %s\n", p.C(report.Bold, fmt.Sprint(i+1)),
 			larghezzaVoce, v.titolo, p.C(report.Dim, v.aiuto))
 	}
-	fmt.Println()
+	fmt.Fprintln(s.out())
 }
 
 // vaDalVivo passa alla schermata che si aggiorna da sola e torna al menu quando
@@ -272,11 +288,11 @@ func (s *sessione) mostra(voci []voce) {
 // del terminale.
 func vaDalVivo(s *sessione) bool {
 	if s.referto != "" {
-		fmt.Printf("\n  %s\n", s.stampante().C(report.Dim, s.lingua.S(
+		fmt.Fprintf(s.out(), "\n  %s\n", s.stampante().C(report.Dim, s.lingua.S(
 			"the open report will keep updating too",
 			"anche il referto aperto continuerà ad aggiornarsi")))
 	}
-	ciclaDalVivo(&s.snap, s.lingua, s.colore(), s.ansi, s.cfg.Durata(), s.referto, s.opzioniHTML())
+	ciclaDalVivo(s.stampante(), &s.snap, s.ansi, s.cfg.Durata(), s.referto, s.opzioniHTML())
 	s.ricalcola()
 	return false
 }
@@ -290,20 +306,20 @@ func apriReferto(s *sessione) bool {
 		return false
 	}
 	s.referto = percorso
-	fmt.Printf("\n  %s %s\n", l.S("Report saved to:", "Referto salvato in:"), percorso)
+	fmt.Fprintf(s.out(), "\n  %s %s\n", l.S("Report saved to:", "Referto salvato in:"), percorso)
 
 	if err := gui.Open(percorso); err != nil {
 		// Il file c'è comunque: si dice dov'è, invece di far sembrare fallito
 		// tutto il lavoro perché non si è aperto un browser.
 		s.avviso(err)
-		fmt.Printf("  %s\n", l.S("Open it yourself with a double click.", "Aprilo tu con un doppio clic."))
+		fmt.Fprintf(s.out(), "  %s\n", l.S("Open it yourself with a double click.", "Aprilo tu con un doppio clic."))
 	}
 	return false
 }
 
 func rifaiLaDiagnosi(s *sessione) bool {
 	l := s.lingua
-	fmt.Printf("\n  %s\n", l.S("Reading the drives...", "Lettura dei dischi in corso..."))
+	fmt.Fprintf(s.out(), "\n  %s\n", l.S("Reading the drives...", "Lettura dei dischi in corso..."))
 
 	snap, err := collect.Collect()
 	if err != nil {
@@ -346,8 +362,8 @@ func esportaDati(s *sessione) bool {
 		return false
 	}
 
-	fmt.Printf("\n  %s %s\n", l.S("Data saved to:", "Dati salvati in:"), percorso)
-	fmt.Printf("  %s\n", s.stampante().C(report.Dim, l.S(
+	fmt.Fprintf(s.out(), "\n  %s %s\n", l.S("Data saved to:", "Dati salvati in:"), percorso)
+	fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Dim, l.S(
 		"Make, model and timestamps were removed. Every measurement is untouched.",
 		"Marca, modello e orari sono stati rimossi. Tutte le misure sono intatte.")))
 	return false
@@ -362,11 +378,11 @@ func riavviaComeAmministratore(s *sessione) bool {
 		return false
 	}
 	if elevate.Richiedi(eseguibile, os.Args[1:]) {
-		fmt.Printf("\n  %s\n", l.S("Continuing in the new window.", "Si prosegue nella nuova finestra."))
+		fmt.Fprintf(s.out(), "\n  %s\n", l.S("Continuing in the new window.", "Si prosegue nella nuova finestra."))
 		return true
 	}
 
-	fmt.Printf("\n  %s\n", l.S("The request was refused: continuing without privileges.",
+	fmt.Fprintf(s.out(), "\n  %s\n", l.S("The request was refused: continuing without privileges.",
 		"Richiesta rifiutata: si prosegue senza privilegi."))
 	return false
 }

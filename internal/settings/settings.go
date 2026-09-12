@@ -32,6 +32,12 @@ type Config struct {
 	Customer   string `json:"customer,omitempty"`
 	Colors     bool   `json:"colors"`
 
+	// PlainSymbols forza i caratteri semplici anche dove la console saprebbe
+	// disegnare gli altri. Serve a chi ha un terminale che dichiara di saperli
+	// fare e poi non li fa: il riconoscimento automatico guarda il font, e un
+	// font puo' mentire.
+	PlainSymbols bool `json:"plainSymbols,omitempty"`
+
 	// ReportDir vuoto significa "accanto all'eseguibile", che è dove chi lancia
 	// il programma con un doppio clic si aspetta di trovare i file.
 	ReportDir string `json:"reportDir,omitempty"`

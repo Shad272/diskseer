@@ -154,12 +154,24 @@ Open the report and then go live, and the page keeps updating too.
 ### Settings
 
 Stored in `%APPDATA%\diskseer\settings.json`: language, refresh interval, the
-technician and customer details printed on reports, colours, and the folder
-reports are saved to. Options written on the command line always win for that
-run.
+technician and customer details printed on reports, colours, symbols, and the
+folder reports are saved to. Options written on the command line always win for
+that run.
 
 Switching language applies immediately and then asks — in the language you just
 picked — whether it should become the default.
+
+### Old consoles
+
+Bullets, arrows, bars, the degree sign and the disc in the banner are drawn with
+characters that a console using a raster font cannot display — they come out as
+empty boxes, and `84 °C` becomes `84 ▫▫` on the one line you most need to read.
+
+diskseer checks the console font and falls back to plain characters on its own
+when that is the case. The report stays identical in substance: `*` for bullets,
+`->` for actions, `#` for bars, and a disc drawn with `#` `-` `_` that is still
+a disc. Force it with `--ascii`, or from **Settings → Symbols** when a console
+claims it can draw them and then doesn't.
 
 ### From a terminal
 
@@ -171,6 +183,7 @@ diskseer --lang it           # report in Italian
 diskseer --json              # raw data, for scripts
 diskseer --json --anonymous  # raw data with the machine identity stripped
 diskseer --menu              # the interactive menu, without double-clicking
+diskseer --ascii             # plain characters, for consoles that cannot draw the rest
 diskseer --gui               # write the report and open it in the browser
 diskseer --watch             # stay open and refresh the readings live
 diskseer --watch --gui       # live dashboard in the browser, live view in the terminal
