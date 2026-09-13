@@ -18,7 +18,53 @@ var (
 const (
 	codepageUTF8                    = 65001
 	enableVirtualTerminalProcessing = 0x0004
+
+	// Modalità dell'ingresso della console. La modifica rapida si può
+	// cambiare solo dichiarando anche i flag estesi: senza, SetConsoleMode
+	// ignora il bit in silenzio.
+	enableQuickEditMode = 0x0040
+	enableExtendedFlags = 0x0080
 )
+
+// SospendiModificaRapida spegne la modifica rapida della console e restituisce
+// la funzione che la rimette com'era.
+//
+// La modifica rapida è l'opzione di Windows per cui un clic nella finestra
+// comincia a selezionare testo. Nella vista dal vivo fa due danni, ed entrambi
+// sembrano guasti del programma:
+//
+//   - finché c'è una selezione la console sospende l'uscita, e i valori
+//     smettono di aggiornarsi senza nessun motivo apparente;
+//   - con del testo selezionato il primo Ctrl+C copia la selezione invece di
+//     arrivare al programma, e per fermare la vista serve premerlo due volte.
+//
+// La modifica viene rimessa com'era all'uscita: è un'impostazione della
+// finestra, non di diskseer, e chi ha lanciato il programma dal proprio
+// terminale deve ritrovarselo come l'aveva lasciato.
+//
+// Se l'ingresso non è una console, o la modifica rapida era già spenta, non si
+// tocca niente e la funzione restituita non fa niente.
+func SospendiModificaRapida() func() {
+	h, err := syscall.GetStdHandle(syscall.STD_INPUT_HANDLE)
+	if err != nil {
+		return func() {}
+	}
+	var modo uint32
+	if r, _, _ := procGetConsoleMode.Call(uintptr(h), uintptr(unsafe.Pointer(&modo))); r == 0 {
+		return func() {}
+	}
+	if modo&enableQuickEditMode == 0 {
+		return func() {}
+	}
+
+	senza := (modo | enableExtendedFlags) &^ enableQuickEditMode
+	if r, _, _ := procSetConsoleMode.Call(uintptr(h), uintptr(senza)); r == 0 {
+		return func() {}
+	}
+	return func() {
+		procSetConsoleMode.Call(uintptr(h), uintptr(modo|enableExtendedFlags))
+	}
+}
 
 // PrepareConsole predispone la console di Windows e dice se supporta i colori.
 //

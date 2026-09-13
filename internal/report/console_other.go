@@ -14,3 +14,6 @@ func LanciatoDaEsploraRisorse() bool { return false }
 // ConsolaDisegnaSimboli: fuori da Windows i terminali disegnano UTF-8 senza
 // storie, e il font lo sceglie l'utente sapendo cosa sta scegliendo.
 func ConsolaDisegnaSimboli() bool { return true }
+
+// SospendiModificaRapida riguarda solo la console di Windows.
+func SospendiModificaRapida() func() { return func() {} }

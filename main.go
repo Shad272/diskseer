@@ -350,6 +350,11 @@ func ciclaDalVivo(stampante report.Printer, snap *model.Snapshot, ridisegna bool
 	ripristina := report.PrepareLive(stampante.W, ridisegna)
 	defer ripristina()
 
+	// Senza modifica rapida un clic nella finestra non ferma più l'aggiornamento
+	// e il primo Ctrl+C arriva sempre al programma. Si rimette com'era uscendo.
+	riattivaModificaRapida := report.SospendiModificaRapida()
+	defer riattivaModificaRapida()
+
 	// Ctrl+C non deve limitarsi a terminare il processo: il cursore è stato
 	// nascosto, e un terminale che resta senza cursore sembra bloccato anche
 	// dopo che il programma è finito.
