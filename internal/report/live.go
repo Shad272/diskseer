@@ -79,7 +79,13 @@ func (p Printer) PrintLive(snap model.Snapshot, fs []rules.Finding, opt LiveOpti
 	p.liveVerdetti(&b, fs)
 
 	b.WriteString("\n  ")
-	b.WriteString(p.c(dim, l.S("Ctrl+C to stop", "Ctrl+C per fermare")))
+	// "1 o 2 volte" non è un modo di dire. Nella console di Windows, se è
+	// selezionato del testo — basta aver cliccato dentro la finestra — il primo
+	// Ctrl+C copia la selezione invece di fermare il programma, e solo il
+	// secondo arriva a diskseer. Chi preme una volta e non vede succedere
+	// niente pensa che il programma sia bloccato.
+	b.WriteString(p.c(dim, l.S("Press Ctrl+C to stop (once or twice)",
+		"Premi Ctrl+C per fermare (1 o 2 volte)")))
 	b.WriteString("\n")
 
 	if opt.Ridisegna {
