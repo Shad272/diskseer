@@ -15,93 +15,95 @@ import (
 // Le impostazioni, viste da chi le cambia.
 //
 // Ogni modifica viene salvata subito, tranne la lingua: quella si applica
-// all'istante ma chiede se deve valere anche per i prossimi avvii. È voluto —
+// all'istante ma chiede se deve valere anche le volte successive. È voluto —
 // la lingua è l'unica impostazione che si cambia spesso per un momento solo,
 // per mostrare un referto a qualcuno che non parla la tua.
+//
+// Le scelte con più di due valori — la lingua, la grafica — si fanno da un
+// elenco con la spiegazione accanto, non premendo lo stesso numero finché non
+// esce il valore giusto: un interruttore a tre posizioni costringe a indovinare
+// quale sia la successiva, e a leggere un'etichetta abbreviata per capire cosa
+// si è appena scelto.
+
+// impostazione è una riga del menu: cosa si vede e cosa succede se la si sceglie.
+type impostazione struct {
+	etichetta string
+	valore    string
+	cambia    func(*sessione)
+}
 
 func apriImpostazioni(s *sessione) bool {
 	for {
-		s.mostraImpostazioni()
+		elenco := s.impostazioni()
+		s.mostraImpostazioni(elenco)
 
-		scelta, ok := s.leggi("  > ")
+		scelta, ok := s.chiediNumero()
 		if !ok {
 			return true // ingresso chiuso: si chiude tutto, non solo questo menu
 		}
-		switch strings.ToLower(scelta) {
-		case "", "0", "9", "q", "b":
-			return false
-		case "1":
-			s.cambiaLingua()
-		case "2":
-			s.cambiaIntervallo()
-		case "3":
-			s.cambiaTesto(&s.cfg.Technician, s.lingua.S("Technician", "Tecnico"))
-		case "4":
-			s.cambiaTesto(&s.cfg.Contact, s.lingua.S("Contact", "Contatto"))
-		case "5":
-			s.cambiaTesto(&s.cfg.Customer, s.lingua.S("Customer", "Cliente"))
-		case "6":
-			s.cfg.Colors = !s.cfg.Colors
-			s.salvaImpostazioni()
-		case "7":
-			s.cambiaCartella()
-		case "8":
-			s.cfg.Symbols = settings.ProssimiSimboli(s.cfg.Symbols)
-			s.salvaImpostazioni()
-		default:
-			fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Dim,
-				s.lingua.S("type a number between 1 and 9", "digita un numero fra 1 e 9")))
+		if scelta == "" {
+			continue
 		}
+		if scelta == "0" {
+			return false
+		}
+
+		i, ok := indiceVoce(scelta, len(elenco))
+		if !ok {
+			s.nessunaOpzione(scelta)
+			continue
+		}
+		elenco[i].cambia(s)
 	}
 }
 
-type rigaImpostazione struct{ etichetta, valore string }
-
-// righeImpostazioni descrive cosa mostrare, senza stamparlo.
-//
-// Sta separata dalla stampa per poterla collaudare: le etichette devono stare
-// dentro la loro colonna in tutte e due le lingue, e in italiano sono
-// sistematicamente più lunghe.
-func (s *sessione) righeImpostazioni() []rigaImpostazione {
-	p := s.stampante()
+// impostazioni elenca le righe del menu. Sta separata dalla stampa per poterla
+// collaudare: le etichette devono stare nella loro colonna in tutte e due le
+// lingue, e in italiano sono sistematicamente più lunghe.
+func (s *sessione) impostazioni() []impostazione {
 	l := s.lingua
-
+	p := s.stampante()
 	nonImpostato := p.C(report.Dim, l.S("(not set)", "(non impostato)"))
-	acceso := l.S("on", "accesi")
+
+	colori := l.S("on", "accesi")
 	if !s.cfg.Colors {
-		acceso = l.S("off", "spenti")
+		colori = l.S("off", "spenti")
 	}
 	cartella := l.S("next to diskseer.exe", "accanto a diskseer.exe")
 	if s.cfg.ReportDir != "" {
 		cartella = s.cfg.ReportDir
 	}
 
-	return []rigaImpostazione{
-		{l.S("Language", "Lingua"), l.S("English", "Italiano")},
-		{l.S("Refresh interval", "Intervallo di aggiornamento"), s.cfg.Durata().String()},
-		{l.S("Technician", "Tecnico"), oppure(s.cfg.Technician, nonImpostato)},
-		{l.S("Contact", "Contatto"), oppure(s.cfg.Contact, nonImpostato)},
-		{l.S("Customer", "Cliente"), oppure(s.cfg.Customer, nonImpostato)},
-		{l.S("Colours", "Colori"), acceso},
-		{l.S("Report folder", "Cartella dei referti"), cartella},
-		{l.S("Symbols", "Simboli"), s.descriviSimboli()},
+	return []impostazione{
+		{l.S("Language", "Lingua"), l.S("English", "Italiano"), (*sessione).cambiaLingua},
+		{l.S("Live refresh", "Aggiornamento dal vivo"), s.ogniQuanto(), (*sessione).cambiaIntervallo},
+		{l.S("Technician name", "Nome del tecnico"), oppure(s.cfg.Technician, nonImpostato),
+			func(s *sessione) { s.cambiaTesto(&s.cfg.Technician, s.lingua.S("Technician name", "Nome del tecnico")) }},
+		{l.S("Technician contact", "Contatto del tecnico"), oppure(s.cfg.Contact, nonImpostato),
+			func(s *sessione) {
+				s.cambiaTesto(&s.cfg.Contact, s.lingua.S("Technician contact", "Contatto del tecnico"))
+			}},
+		{l.S("Customer name", "Nome del cliente"), oppure(s.cfg.Customer, nonImpostato),
+			func(s *sessione) { s.cambiaTesto(&s.cfg.Customer, s.lingua.S("Customer name", "Nome del cliente")) }},
+		{l.S("Colours", "Colori"), colori, (*sessione).cambiaColori},
+		{l.S("Report folder", "Cartella dei referti"), cartella, (*sessione).cambiaCartella},
+		{l.S("Graphics", "Grafica"), s.descriviGrafica(), (*sessione).cambiaGrafica},
 	}
 }
 
-func (s *sessione) mostraImpostazioni() {
+func (s *sessione) mostraImpostazioni(elenco []impostazione) {
 	p := s.stampante()
 	l := s.lingua
 
-	fmt.Fprintln(s.out())
-	fmt.Fprintf(s.out(), "  %s\n\n", p.C(report.Bold, l.S("SETTINGS", "IMPOSTAZIONI")))
+	fmt.Fprintf(s.out(), "\n  %s\n\n", p.C(report.Bold, l.S("SETTINGS", "IMPOSTAZIONI")))
 
-	for i, r := range s.righeImpostazioni() {
-		fmt.Fprintf(s.out(), "   %s  %-*s %s\n", p.C(report.Bold, fmt.Sprint(i+1)), larghezzaVoce, r.etichetta, r.valore)
+	righe := make([][2]string, len(elenco))
+	for i, imp := range elenco {
+		righe[i] = [2]string{imp.etichetta, imp.valore}
 	}
-	fmt.Fprintf(s.out(), "   %s  %s\n", p.C(report.Bold, "8"), l.S("Back", "Indietro"))
+	s.mostraVoci(righe, l.S("Back", "Indietro"))
 
 	fmt.Fprintf(s.out(), "\n  %s\n", p.C(report.Dim, s.doveSonoSalvate()))
-	fmt.Fprintln(s.out())
 }
 
 // doveSonoSalvate dice all'utente quale file stiamo scrivendo. Un programma che
@@ -117,25 +119,29 @@ func (s *sessione) doveSonoSalvate() string {
 	return l.F("Settings file: %s", "File delle impostazioni: %s", percorso)
 }
 
-// descriviSimboli dice quali caratteri si stanno usando e, quando sono quelli
-// essenziali senza che l'utente li abbia chiesti, perché.
-//
-// Serve a non far sembrare un difetto una scelta: chi vede un referto con gli
-// asterischi al posto dei pallini deve poter capire in un colpo d'occhio che è
-// la sua console a non saperli disegnare, e che si può forzare il contrario.
-func (s *sessione) descriviSimboli() string {
+// ogniQuanto scrive l'intervallo per esteso e con il plurale giusto: "3s" è
+// una sigla da programmatori, "ogni 1 secondi" un errore.
+func (s *sessione) ogniQuanto() string {
+	secondi := uint64(s.cfg.Durata().Seconds())
+	return s.lingua.S("every ", "ogni ") +
+		s.lingua.N(secondi, "second", "seconds", "secondo", "secondi")
+}
+
+// descriviGrafica dice quale grafica è in uso e, se la sceglie il programma,
+// quale ha scelto per questa finestra: "automatica" da sola non dice cosa si
+// sta guardando.
+func (s *sessione) descriviGrafica() string {
 	l := s.lingua
 	switch s.cfg.Symbols {
-	case settings.SimboliPiani:
-		return l.S("plain text (chosen)", "solo testo (scelto)")
 	case settings.SimboliRicchi:
-		return l.S("full (chosen)", "completi (scelto)")
+		return l.S("full", "completa")
+	case settings.SimboliPiani:
+		return l.S("simple", "semplice")
 	}
 	if s.consolaRicca {
-		return l.S("full (automatic)", "completi (automatico)")
+		return l.S("automatic (full in this window)", "automatica (completa in questa finestra)")
 	}
-	return l.S("plain text - this console was not recognised",
-		"solo testo - questa console non e' stata riconosciuta")
+	return l.S("automatic (simple in this window)", "automatica (semplice in questa finestra)")
 }
 
 func oppure(valore, seVuoto string) string {
@@ -145,71 +151,93 @@ func oppure(valore, seVuoto string) string {
 	return valore
 }
 
-// cambiaLingua applica subito la scelta e poi chiede se renderla permanente.
+// sottomenu mostra un elenco di scelte con la sua intestazione e restituisce la
+// posizione scelta, oppure -1 per "indietro" o per una risposta non valida.
+func (s *sessione) sottomenu(titolo string, righe [][2]string) int {
+	p := s.stampante()
+	fmt.Fprintf(s.out(), "\n  %s\n\n", p.C(report.Bold, titolo))
+
+	attenuate := make([][2]string, len(righe))
+	for i, r := range righe {
+		attenuate[i] = [2]string{r[0], p.C(report.Dim, r[1])}
+	}
+	s.mostraVoci(attenuate, s.lingua.S("Back", "Indietro"))
+
+	scelta, ok := s.chiediNumero()
+	if !ok || scelta == "" || scelta == "0" {
+		return -1
+	}
+	i, ok := indiceVoce(scelta, len(righe))
+	if !ok {
+		s.nessunaOpzione(scelta)
+		return -1
+	}
+	return i
+}
+
+// cambiaLingua applica subito la scelta e poi chiede se deve valere anche le
+// volte successive.
 //
 // La domanda arriva già nella lingua appena scelta: è la conferma immediata che
 // il cambio ha avuto effetto, prima ancora che l'utente risponda.
 func (s *sessione) cambiaLingua() {
-	fmt.Fprintln(s.out())
-	fmt.Fprintf(s.out(), "   1  English\n   2  Italiano\n\n")
-
-	scelta, ok := s.leggi("  > ")
-	if !ok {
-		return
-	}
-	switch scelta {
-	case "1":
-		s.lingua = i18n.EN
-	case "2":
-		s.lingua = i18n.IT
-	default:
+	lingue := []i18n.Lingua{i18n.EN, i18n.IT}
+	i := s.sottomenu(s.lingua.S("LANGUAGE", "LINGUA"), [][2]string{
+		{"English", ""},
+		{"Italiano", ""},
+	})
+	if i < 0 {
 		return
 	}
 
+	s.lingua = lingue[i]
 	// I verdetti contengono frasi già tradotte: senza rifarli, il menu
 	// parlerebbe una lingua e il referto un'altra.
 	s.ricalcola()
 
-	if s.conferma(s.lingua.S("Make English the default language? [y/N]",
-		"Vuoi che l'italiano diventi la lingua predefinita? [s/N]")) {
-		s.cfg.Language = s.lingua.String()
-		s.salvaImpostazioni()
+	l := s.lingua
+	fmt.Fprintln(s.out())
+	if s.conferma(l.S("Use English next time too? Type y for yes or n for no:",
+		"Usare l'italiano anche le prossime volte? Scrivi s per sì o n per no:")) {
+		s.cfg.Language = l.String()
+		s.salva(l.S("From now on diskseer starts in English.", "Da ora in poi diskseer parte in italiano."))
 		return
 	}
-	fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Dim, s.lingua.S(
-		"Kept for this session only.", "Vale solo per questa sessione.")))
+	s.fatto(l.S("English only for this time.", "Italiano solo per questa volta."))
 }
 
 func (s *sessione) cambiaIntervallo() {
 	l := s.lingua
 
-	risposta, ok := s.leggi("\n  " + l.F("Refresh every how many seconds? [%d] ",
-		"Ogni quanti secondi aggiornare? [%d] ", int(s.cfg.Durata().Seconds())))
+	risposta, ok := s.leggi("\n  " + l.F(
+		"Every how many seconds should live mode update? (now %d): ",
+		"Ogni quanti secondi aggiornare la modalità dal vivo? (ora %d): ",
+		int(s.cfg.Durata().Seconds())))
 	if !ok || risposta == "" {
 		return
 	}
 
 	// Si accetta sia "5" sia "5s": chi risponde con il numero secco a una
-	// domanda che finisce con "secondi" ha ragione lui.
+	// domanda sui secondi ha ragione lui.
 	if _, err := strconv.Atoi(risposta); err == nil {
 		risposta += "s"
 	}
 	d, err := time.ParseDuration(risposta)
 	if err != nil || d < time.Second {
-		fmt.Fprintf(s.out(), "  %s\n", l.S("Not a valid interval: one second is the minimum.",
-			"Intervallo non valido: il minimo è un secondo."))
+		s.problema(l.S("That is not a valid number of seconds: it must be 1 or more.",
+			"Non è un numero di secondi valido: deve essere 1 o più."))
 		return
 	}
 	s.cfg.Interval = d.String()
-	s.salvaImpostazioni()
+	s.salva(l.S("Live mode will update ", "La modalità dal vivo si aggiornerà ") + s.ogniQuanto() + ".")
 }
 
 func (s *sessione) cambiaTesto(campo *string, etichetta string) {
 	l := s.lingua
 
 	fmt.Fprintf(s.out(), "\n  %s\n", s.stampante().C(report.Dim, l.S(
-		"ENTER to leave it as it is, - to clear it.",
-		"INVIO per lasciarlo com'è, - per cancellarlo.")))
+		"Write the new value and press ENTER. ENTER alone leaves it as it is, a single - deletes it.",
+		"Scrivi il nuovo valore e premi INVIO. Solo INVIO lo lascia com'è, un trattino - lo cancella.")))
 
 	risposta, ok := s.leggi("  " + etichetta + ": ")
 	if !ok || risposta == "" {
@@ -217,26 +245,38 @@ func (s *sessione) cambiaTesto(campo *string, etichetta string) {
 	}
 	if risposta == "-" {
 		*campo = ""
-	} else {
-		*campo = risposta
+		s.salva(etichetta + l.S(" deleted.", " cancellato."))
+		return
 	}
-	s.salvaImpostazioni()
+	*campo = risposta
+	s.salva(etichetta + ": " + risposta + ".")
+}
+
+func (s *sessione) cambiaColori() {
+	l := s.lingua
+	s.cfg.Colors = !s.cfg.Colors
+	if s.cfg.Colors {
+		s.salva(l.S("Colours on.", "Colori accesi."))
+		return
+	}
+	s.salva(l.S("Colours off.", "Colori spenti."))
 }
 
 func (s *sessione) cambiaCartella() {
 	l := s.lingua
 
 	fmt.Fprintf(s.out(), "\n  %s\n", s.stampante().C(report.Dim, l.S(
-		"ENTER to leave it as it is, - to go back to the folder holding diskseer.exe.",
-		"INVIO per lasciarla com'è, - per tornare alla cartella di diskseer.exe.")))
+		"Write the folder and press ENTER. ENTER alone leaves it as it is, a single - goes back to the folder of diskseer.exe.",
+		"Scrivi la cartella e premi INVIO. Solo INVIO la lascia com'è, un trattino - torna alla cartella di diskseer.exe.")))
 
-	risposta, ok := s.leggi("  " + l.S("Folder", "Cartella") + ": ")
+	risposta, ok := s.leggi("  " + l.S("Report folder", "Cartella dei referti") + ": ")
 	if !ok || risposta == "" {
 		return
 	}
 	if risposta == "-" {
 		s.cfg.ReportDir = ""
-		s.salvaImpostazioni()
+		s.salva(l.S("Reports will be saved next to diskseer.exe.",
+			"I referti verranno salvati accanto a diskseer.exe."))
 		return
 	}
 
@@ -244,22 +284,58 @@ func (s *sessione) cambiaCartella() {
 	// battitura scoperto qui costa una riga, scoperto dopo costa una diagnosi.
 	info, err := os.Stat(risposta)
 	if err != nil || !info.IsDir() {
-		fmt.Fprintf(s.out(), "  %s\n", l.S("That folder does not exist.", "Quella cartella non esiste."))
+		s.problema(l.F("The folder %q does not exist.", "La cartella %q non esiste.", risposta))
 		return
 	}
 	s.cfg.ReportDir = risposta
-	s.salvaImpostazioni()
+	s.salva(l.F("Reports will be saved in %s.", "I referti verranno salvati in %s.", risposta))
 }
 
-func (s *sessione) salvaImpostazioni() {
+// cambiaGrafica offre le tre grafiche con la spiegazione di ciascuna.
+//
+// È l'impostazione più difficile da capire dal nome, e la più importante per
+// chi ne ha bisogno: chi vede quadratini vuoti al posto dei simboli deve poter
+// riconoscere la cura leggendo la riga, senza sapere cosa sia un font.
+func (s *sessione) cambiaGrafica() {
 	l := s.lingua
+	valori := []string{settings.SimboliAuto, settings.SimboliRicchi, settings.SimboliPiani}
 
-	percorso, err := s.cfg.Salva()
-	if err != nil {
-		// Non salvare è un fastidio, non un guasto: la sessione in corso
-		// funziona lo stesso con le impostazioni appena cambiate.
-		fmt.Fprintf(s.out(), "  %s %v\n", l.S("Settings not saved:", "Impostazioni non salvate:"), err)
+	i := s.sottomenu(l.S("GRAPHICS", "GRAFICA"), [][2]string{
+		{l.S("Automatic", "Automatica"), l.S("diskseer decides by looking at this window",
+			"decide diskseer guardando questa finestra")},
+		{l.S("Full", "Completa"), l.S("frames, dots and symbols", "cornici, pallini e simboli")},
+		{l.S("Simple", "Semplice"), l.S("plain letters only: choose it if you see empty squares",
+			"solo lettere normali: sceglila se vedi quadratini vuoti")},
+	})
+	if i < 0 {
 		return
 	}
-	fmt.Fprintf(s.out(), "  %s %s\n", s.stampante().C(report.Green, l.S("Saved in", "Salvate in")), percorso)
+
+	s.cfg.Symbols = valori[i]
+	s.salva(l.S("Graphics: ", "Grafica: ") + s.descriviGrafica() + ".")
+}
+
+// salva scrive le impostazioni e dice in una riga cosa è cambiato.
+//
+// Il messaggio descrive il risultato, non l'operazione: "Colori spenti.
+// Salvato." dice all'utente cosa aspettarsi, un percorso di file no.
+func (s *sessione) salva(cosaECambiato string) {
+	l := s.lingua
+	if _, err := s.cfg.Salva(); err != nil {
+		// Non salvare è un fastidio, non un guasto: la sessione in corso
+		// funziona lo stesso con l'impostazione appena cambiata.
+		s.problema(cosaECambiato + " " + l.F(
+			"It applies now but could not be saved: %v",
+			"Vale adesso ma non è stato possibile salvarlo: %v", err))
+		return
+	}
+	s.fatto(cosaECambiato + l.S(" Saved.", " Salvato."))
+}
+
+func (s *sessione) fatto(messaggio string) {
+	fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Green, messaggio))
+}
+
+func (s *sessione) problema(messaggio string) {
+	fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Yellow, messaggio))
 }

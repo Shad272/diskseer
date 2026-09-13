@@ -76,18 +76,6 @@ func (c Config) Piani(consolaRicca bool) bool {
 	}
 }
 
-// ProssimiSimboli ruota fra i tre stati, per il menu.
-func ProssimiSimboli(attuale string) string {
-	switch attuale {
-	case SimboliRicchi:
-		return SimboliPiani
-	case SimboliPiani:
-		return SimboliAuto
-	default:
-		return SimboliRicchi
-	}
-}
-
 // Percorso indica dove vivono le impostazioni.
 func Percorso() (string, error) {
 	dir, err := os.UserConfigDir()

@@ -28,12 +28,21 @@ import (
 // era raggiungibile solo scrivendo opzioni su una riga di comando che chi fa
 // doppio clic non aprirà mai.
 //
-// Da qui in poi la diagnosi non è la fine del programma, è il suo inizio: si
-// legge il referto e poi si decide cosa farci.
-//
 // Il menu compare solo quando c'è una persona davanti. Da terminale, con delle
 // opzioni, diskseer resta quello di prima — stampa ed esce — perché è così che
 // deve comportarsi dentro uno script.
+//
+// Due regole valgono per tutti i menu del programma, e sono entrambe nate da un
+// errore vero:
+//
+//   - i numeri non si scrivono a mano. Li assegna il programma scorrendo
+//     l'elenco, così due voci con lo stesso numero non possono esistere. Il
+//     menu delle impostazioni ne ha avute due con il numero 8: una voce
+//     aggiunta in fondo all'elenco, e il numero di "Indietro" rimasto scritto a
+//     mano com'era prima;
+//   - uscire è sempre 0. Un numero che cambia a seconda di quante voci ci sono
+//     sopra — e la voce dell'amministratore c'è o non c'è — costringe a
+//     rileggere l'elenco ogni volta per trovare l'uscita.
 
 const larghezzaVoce = 28
 
@@ -51,9 +60,7 @@ type sessione struct {
 	//     anche da solo, perché la vista dal vivo si ridisegna sul posto pure
 	//     quando i colori sono spenti;
 	//   - coloriConsentiti: --no-color o NO_COLOR sulla riga di comando, cioè
-	//     "non adesso". Non è una preferenza e non va salvata: chi reindirizza
-	//     l'uscita una volta non sta scegliendo un diskseer in bianco e nero
-	//     per sempre;
+	//     "non adesso". Non è una preferenza e non va salvata;
 	//   - cfg.Colors: la preferenza vera, quella che il menu cambia e salva.
 	ansi             bool
 	coloriConsentiti bool
@@ -65,9 +72,9 @@ type sessione struct {
 	pianoDaFlag  bool
 	riccoDaFlag  bool
 
-	// grezzo e' lo schermo vero. L'uscita usata per stampare ci viene
-	// costruita sopra a ogni chiamata, perche' dal menu si puo' cambiare
-	// l'impostazione dei caratteri e il cambio deve vedersi subito.
+	// grezzo è lo schermo vero. L'uscita usata per stampare ci viene costruita
+	// sopra a ogni chiamata, perché dal menu si può cambiare la grafica e il
+	// cambio deve vedersi subito.
 	grezzo io.Writer
 
 	in *bufio.Reader
@@ -132,14 +139,20 @@ func (s *sessione) percorsoAccanto(nome string) string {
 // leggi chiede una riga all'utente. Il secondo valore è false quando non c'è
 // più niente da leggere: succede se l'ingresso è un file invece di una
 // tastiera, e senza questo controllo il menu girerebbe a vuoto per sempre.
-func (s *sessione) leggi(prompt string) (string, bool) {
-	fmt.Fprint(s.out(), prompt)
+func (s *sessione) leggi(domanda string) (string, bool) {
+	fmt.Fprint(s.out(), domanda)
 	riga, err := s.in.ReadString('\n')
 	if err != nil && strings.TrimSpace(riga) == "" {
 		fmt.Fprintln(s.out())
 		return "", false
 	}
 	return strings.TrimSpace(riga), true
+}
+
+// chiediNumero è la domanda uguale per tutti i menu.
+func (s *sessione) chiediNumero() (string, bool) {
+	return s.leggi("\n  " + s.lingua.S("Type a number and press ENTER: ",
+		"Scrivi un numero e premi INVIO: "))
 }
 
 // conferma accetta le risposte affermative di entrambe le lingue: chi lavora in
@@ -160,6 +173,15 @@ func (s *sessione) avviso(err error) {
 	fmt.Fprintf(os.Stderr, "  %s %v\n", s.stampante().C(report.Yellow, "!"), err)
 }
 
+// nessunaOpzione risponde a un numero che non è nell'elenco, dicendo quale
+// numero è stato scritto: "scelta non valida" da sola non aiuta a capire se si
+// è sbagliato tasto o si è capito male il menu.
+func (s *sessione) nessunaOpzione(scritto string) {
+	fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Yellow, s.lingua.F(
+		"There is no option %q: type one of the numbers on the list.",
+		"Non c'è l'opzione %q: scrivi uno dei numeri dell'elenco.", scritto)))
+}
+
 // voce è una riga del menu. L'azione restituisce true per chiudere diskseer.
 type voce struct {
 	titolo string
@@ -167,30 +189,32 @@ type voce struct {
 	fai    func(*sessione) bool
 }
 
+// voci elenca le scelte del menu principale, senza numeri e senza l'uscita:
+// i numeri li assegna mostraVoci, l'uscita è sempre 0.
 func (s *sessione) voci() []voce {
 	l := s.lingua
 
 	v := []voce{{
 		titolo: l.S("Live mode", "Modalità dal vivo"),
-		aiuto: l.F("temperatures and free space, refreshed every %s",
-			"temperature e spazio libero, aggiornati ogni %s", s.cfg.Durata()),
+		aiuto: l.F("temperatures and free space, updated every %d seconds",
+			"temperature e spazio libero, aggiornati ogni %d secondi", int(s.cfg.Durata().Seconds())),
 		fai: vaDalVivo,
 	}, {
 		titolo: l.S("Open the report", "Apri il referto"),
-		aiuto: l.S("write an HTML report and open it in the browser",
-			"scrive un referto HTML e lo apre nel browser"),
+		aiuto: l.S("save an HTML page and open it in the browser",
+			"salva una pagina HTML e la apre nel browser"),
 		fai: apriReferto,
 	}, {
 		titolo: l.S("Run the diagnosis again", "Ripeti la diagnosi"),
-		aiuto:  l.S("re-read every drive from scratch", "rilegge tutti i dischi da zero"),
+		aiuto:  l.S("read every drive again from scratch", "rilegge tutti i dischi da capo"),
 		fai:    rifaiLaDiagnosi,
 	}, {
 		titolo: l.S("Drive details", "Dettagli dei dischi"),
-		aiuto:  l.S("raw SMART and NVMe counters", "contatori grezzi SMART e NVMe"),
+		aiuto:  l.S("raw SMART and NVMe counters, drive by drive", "contatori SMART e NVMe, disco per disco"),
 		fai:    mostraDettagli,
 	}, {
 		titolo: l.S("Export the data", "Esporta i dati"),
-		aiuto:  l.S("anonymised JSON, safe to share", "JSON anonimizzato, si può condividere"),
+		aiuto:  l.S("anonymous JSON file, safe to send to someone", "file JSON anonimo, si può mandare a qualcuno"),
 		fai:    esportaDati,
 	}}
 
@@ -206,11 +230,8 @@ func (s *sessione) voci() []voce {
 
 	return append(v, voce{
 		titolo: l.S("Settings", "Impostazioni"),
-		aiuto:  l.S("language, refresh rate, report details", "lingua, frequenza, dati del referto"),
+		aiuto:  l.S("language, colours, graphics, report details", "lingua, colori, grafica, dati del referto"),
 		fai:    apriImpostazioni,
-	}, voce{
-		titolo: l.S("Close diskseer", "Chiudi diskseer"),
-		fai:    func(*sessione) bool { return true },
 	})
 }
 
@@ -218,23 +239,22 @@ func (s *sessione) voci() []voce {
 func eseguiMenu(s *sessione) int {
 	for {
 		voci := s.voci()
-		s.mostra(voci)
+		s.mostraMenu(voci)
 
-		scelta, ok := s.leggi("  > ")
+		scelta, ok := s.chiediNumero()
 		if !ok {
 			return codiceEsito(s.findings)
 		}
-		switch strings.ToLower(scelta) {
-		case "":
+		if scelta == "" {
 			continue
-		case "q", "quit", "exit", "0":
+		}
+		if scelta == "0" || strings.EqualFold(scelta, "q") {
 			return codiceEsito(s.findings)
 		}
 
-		i, err := indiceVoce(scelta, len(voci))
-		if err != nil {
-			fmt.Fprintf(s.out(), "  %s\n", s.stampante().C(report.Dim, s.lingua.F(
-				"type a number between 1 and %d", "digita un numero fra 1 e %d", len(voci))))
+		i, ok := indiceVoce(scelta, len(voci))
+		if !ok {
+			s.nessunaOpzione(scelta)
 			continue
 		}
 		if voci[i].fai(s) {
@@ -243,23 +263,43 @@ func eseguiMenu(s *sessione) int {
 	}
 }
 
-func indiceVoce(scelta string, quante int) (int, error) {
+// indiceVoce traduce il numero scritto dall'utente nella posizione della voce.
+// Accetta solo un numero intero fra 1 e quante, senza altro intorno.
+func indiceVoce(scelta string, quante int) (int, bool) {
 	var n int
-	if _, err := fmt.Sscanf(scelta, "%d", &n); err != nil {
-		return 0, err
+	var resto string
+	if c, _ := fmt.Sscanf(scelta, "%d%s", &n, &resto); c != 1 {
+		return 0, false
 	}
 	if n < 1 || n > quante {
-		return 0, fmt.Errorf("scelta %d fuori dall'intervallo 1-%d", n, quante)
+		return 0, false
 	}
-	return n - 1, nil
+	return n - 1, true
 }
 
-// mostra disegna lo stato e le scelte.
+// mostraVoci stampa un elenco numerato e, staccata sotto, la voce 0.
+//
+// È l'unico punto in cui si scrivono numeri di menu, e li scrive contando:
+// è ciò che rende impossibile avere due voci con lo stesso numero.
+//
+// La seconda colonna esce così com'è: nel menu principale è una spiegazione e
+// chi chiama la attenua, nelle impostazioni è il valore attuale e deve
+// leggersi bene.
+func (s *sessione) mostraVoci(righe [][2]string, zero string) {
+	p := s.stampante()
+	for i, r := range righe {
+		fmt.Fprintf(s.out(), "   %s  %-*s %s\n", p.C(report.Bold, fmt.Sprint(i+1)),
+			larghezzaVoce, r[0], r[1])
+	}
+	fmt.Fprintf(s.out(), "\n   %s  %s\n", p.C(report.Bold, "0"), zero)
+}
+
+// mostraMenu disegna lo stato e le scelte.
 //
 // La riga di stato in cima si ripete a ogni giro di proposito: dopo una vista
 // dal vivo o una tabella di contatori il referto è scorso via, e il menu deve
 // restare leggibile senza risalire il terminale.
-func (s *sessione) mostra(voci []voce) {
+func (s *sessione) mostraMenu(voci []voce) {
 	p := s.stampante()
 	l := s.lingua
 	riga := strings.Repeat("─", 74)
@@ -284,11 +324,13 @@ func (s *sessione) mostra(voci []voce) {
 	}
 	fmt.Fprintf(s.out(), "  %s\n\n", p.C(report.Dim, riga))
 
+	fmt.Fprintf(s.out(), "  %s\n\n", p.C(report.Bold, l.S("WHAT DO YOU WANT TO DO?", "COSA VUOI FARE?")))
+
+	righe := make([][2]string, len(voci))
 	for i, v := range voci {
-		fmt.Fprintf(s.out(), "   %s  %-*s %s\n", p.C(report.Bold, fmt.Sprint(i+1)),
-			larghezzaVoce, v.titolo, p.C(report.Dim, v.aiuto))
+		righe[i] = [2]string{v.titolo, p.C(report.Dim, v.aiuto)}
 	}
-	fmt.Fprintln(s.out())
+	s.mostraVoci(righe, l.S("Close diskseer", "Chiudi diskseer"))
 }
 
 // vaDalVivo passa alla schermata che si aggiorna da sola e torna al menu quando
@@ -300,8 +342,8 @@ func (s *sessione) mostra(voci []voce) {
 func vaDalVivo(s *sessione) bool {
 	if s.referto != "" {
 		fmt.Fprintf(s.out(), "\n  %s\n", s.stampante().C(report.Dim, s.lingua.S(
-			"the open report will keep updating too",
-			"anche il referto aperto continuerà ad aggiornarsi")))
+			"The open report will keep updating too.",
+			"Anche il referto aperto continuerà ad aggiornarsi.")))
 	}
 	ciclaDalVivo(s.stampante(), &s.snap, s.ansi, s.cfg.Durata(), s.referto, s.opzioniHTML())
 	s.ricalcola()
@@ -330,9 +372,17 @@ func apriReferto(s *sessione) bool {
 
 func rifaiLaDiagnosi(s *sessione) bool {
 	l := s.lingua
-	fmt.Fprintf(s.out(), "\n  %s\n", l.S("Reading the drives...", "Lettura dei dischi in corso..."))
+	fmt.Fprintln(s.out())
 
+	// Stessa rotella dell'avvio, perché è la stessa attesa: la raccolta completa
+	// dura un paio di secondi e uno schermo fermo sembra un programma bloccato.
+	var attesa *report.Attesa
+	if s.ansi {
+		attesa = s.stampante().Attendi(l.S("reading the drives", "lettura dei dischi"))
+	}
 	snap, err := collect.Collect()
+	attesa.Ferma()
+
 	if err != nil {
 		s.erroreRaccolta = err
 		s.avviso(err)

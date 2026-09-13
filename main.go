@@ -224,7 +224,7 @@ func esegui() int {
 	stampante.Print(snap, findings)
 
 	if percorsoHTML != "" {
-		fmt.Printf("  %s %s\n\n", l.S("Report saved to:", "Referto salvato in:"), percorsoHTML)
+		fmt.Fprintf(uscita, "  %s %s\n\n", l.S("Report saved to:", "Referto salvato in:"), percorsoHTML)
 		if *showGUI {
 			apriNelBrowser(percorsoHTML)
 		}
@@ -361,7 +361,7 @@ func ciclaDalVivo(stampante report.Printer, snap *model.Snapshot, ridisegna bool
 	defer ticchettio.Stop()
 
 	if ridisegna {
-		fmt.Print("\033[2J") // una pulizia sola all'avvio, poi si ridisegna sul posto
+		fmt.Fprint(stampante.W, "\033[2J") // una pulizia sola all'avvio, poi si ridisegna sul posto
 	}
 
 	for {

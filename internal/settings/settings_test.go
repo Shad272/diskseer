@@ -131,26 +131,6 @@ func TestITreStatiDeiSimboli(t *testing.T) {
 	}
 }
 
-// La rotazione deve passare per tutti e tre gli stati e tornare al punto di
-// partenza: un ciclo che ne salta uno rende irraggiungibile un'impostazione
-// dal menu.
-func TestProssimiSimboliGiraSuTuttiETre(t *testing.T) {
-	visti := map[string]bool{}
-	stato := SimboliAuto
-	for i := 0; i < 3; i++ {
-		visti[stato] = true
-		stato = ProssimiSimboli(stato)
-	}
-	if stato != SimboliAuto {
-		t.Errorf("dopo tre passi si è a %q invece che di nuovo su %q", stato, SimboliAuto)
-	}
-	for _, atteso := range []string{SimboliAuto, SimboliRicchi, SimboliPiani} {
-		if !visti[atteso] {
-			t.Errorf("lo stato %q non è raggiungibile ruotando", atteso)
-		}
-	}
-}
-
 func TestIPredefinitiScelgonoIlRiconoscimentoAutomatico(t *testing.T) {
 	if c := Predefinite(); c.Symbols != SimboliAuto {
 		t.Errorf("Symbols predefinito = %q, atteso %q", c.Symbols, SimboliAuto)
