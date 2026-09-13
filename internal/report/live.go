@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/rules"
@@ -129,9 +130,35 @@ func (p Printer) liveEsito(b *strings.Builder, fs []rules.Finding, elevato bool)
 	}
 }
 
+// Larghezze delle colonne della tabella dei dischi.
+//
+// Stanno in un posto solo perché intestazione e righe devono usare le stesse:
+// una colonna più larga in una delle due sposta a destra tutto quello che
+// viene dopo, e i valori finiscono sotto il titolo sbagliato.
+const (
+	colTipo     = 4
+	colBus      = 5
+	colModello  = 26
+	colCapacita = 10
+	colTemp     = 4
+	colOre      = 10
+)
+
 func (p Printer) liveDischi(b *strings.Builder, snap model.Snapshot) {
 	l := p.Lang
-	fmt.Fprintf(b, "\n  %s\n", p.c(bold, l.S("DRIVES", "DISCHI")))
+	fmt.Fprintf(b, "\n  %s  %s\n", p.c(bold, l.S("DRIVES", "DISCHI")),
+		p.c(dim, l.S("(▸ = the drive Windows starts from)", "(▸ = il disco da cui parte Windows)")))
+
+	// L'intestazione c'è perché senza i numeri della tabella sono solo numeri:
+	// "1962" accanto a un disco non dice da solo che sono ore di accensione.
+	fmt.Fprintf(b, "    %s\n", p.c(dim, fmt.Sprintf("%-*s %-*s %-*s %*s  %*s  %*s  %s",
+		colTipo, l.S("TYPE", "TIPO"),
+		colBus, "BUS",
+		colModello, l.S("MODEL", "MODELLO"),
+		colCapacita, l.S("SIZE", "CAPACITÀ"),
+		colTemp, "TEMP",
+		colOre, l.S("HOURS ON", "ORE ACCESO"),
+		l.S("HEALTH", "STATO"))))
 
 	for _, d := range snap.Disks {
 		segno := "  "
@@ -143,7 +170,7 @@ func (p Printer) liveDischi(b *strings.Builder, snap model.Snapshot) {
 			tipo = "?"
 		}
 
-		temp := p.c(dim, "  —  ")
+		temp := p.c(dim, fmt.Sprintf("%*s", colTemp, "—"))
 		if d.TemperatureC != nil {
 			t := *d.TemperatureC
 			colore := green
@@ -153,22 +180,50 @@ func (p Printer) liveDischi(b *strings.Builder, snap model.Snapshot) {
 			case t >= 50:
 				colore = yellow
 			}
-			temp = p.c(colore, fmt.Sprintf("%3d°C", t))
+			// La C senza il simbolo del grado. Il grado è l'unico carattere di
+			// questa tabella che la grafica semplice toglie invece di
+			// sostituire: la colonna delle temperature diventerebbe più corta
+			// di un carattere dell'intestazione, e tutto ciò che la segue
+			// scivolerebbe a sinistra.
+			temp = p.c(colore, fmt.Sprintf("%*s", colTemp, fmt.Sprintf("%dC", t)))
 		}
 
-		ore := p.c(dim, "     —")
+		ore := p.c(dim, fmt.Sprintf("%*s", colOre, "—"))
 		if d.PowerOnHours != nil {
-			ore = fmt.Sprintf("%6d", *d.PowerOnHours)
+			ore = fmt.Sprintf("%*d", colOre, *d.PowerOnHours)
 		}
 
-		fmt.Fprintf(b, "  %s%-4s %-5s %-26s %7.1f GB  %s  %s  %s\n",
-			segno, tipo, d.BusType, trunc(d.Model, 26),
-			float64(d.SizeBytes)/(1024*1024*1024), temp, ore, p.saluteDisco(d))
+		capacita := fmt.Sprintf("%.1f GB", float64(d.SizeBytes)/(1024*1024*1024))
+
+		fmt.Fprintf(b, "  %s%-*s %-*s %-*s %*s  %s  %s  %s\n",
+			segno, colTipo, tipo, colBus, d.BusType,
+			colModello, troncaColonna(d.Model, colModello),
+			colCapacita, capacita, temp, ore, p.saluteDisco(d))
 	}
 }
 
-// saluteDisco riassume in poche parole lo stato del disco: la vita consumata
-// se il disco la dichiara, altrimenti il giudizio di Windows.
+// troncaColonna accorcia un testo a una larghezza fissa usando tre punti veri.
+//
+// Il troncamento del resto del programma usa il carattere dei puntini di
+// sospensione, che occupa una colonna. In grafica semplice diventa tre punti,
+// cioè due colonne in più: nella tabella il modello troncato spingeva a destra
+// capacità, temperatura e ore di quella riga soltanto. Qui si usano i tre
+// punti fin dall'inizio, così la larghezza è la stessa in entrambe le grafiche.
+func troncaColonna(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:n-3]) + "..."
+}
+
+// saluteDisco riassume in poche parole lo stato del disco: quanto è consumato,
+// se il disco lo dichiara, altrimenti il giudizio di Windows.
+//
+// Il consumo si chiama "usura", non "vita". È lo stesso numero che lo
+// standard NVMe chiama "percentuale usata", e parte da zero su un disco nuovo:
+// scritto "vita 1%" si leggeva come "gli resta l'1%", cioè il contrario, su un
+// disco praticamente nuovo.
 func (p Printer) saluteDisco(d model.Disk) string {
 	l := p.Lang
 	if d.NVMe != nil && d.NVMe.CriticalWarning != 0 {
@@ -183,7 +238,7 @@ func (p Printer) saluteDisco(d model.Disk) string {
 		case v >= 80:
 			colore = yellow
 		}
-		return p.c(colore, l.F("life %d%%", "vita %d%%", v))
+		return p.c(colore, l.F("wear %d%%", "usura %d%%", v))
 	}
 	if d.HealthStatus != "" && d.HealthStatus != "Healthy" {
 		return p.c(yellow, d.HealthStatus)
