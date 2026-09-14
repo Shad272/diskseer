@@ -90,27 +90,71 @@ func (s *sessione) impostazioni() []impostazione {
 		{l.S("Colours", "Colori"), colori, (*sessione).cambiaColori},
 		{l.S("Report folder", "Cartella dei referti"), cartella, (*sessione).cambiaCartella},
 		{l.S("Graphics", "Grafica"), s.descriviGrafica(), (*sessione).cambiaGrafica},
-		{l.S("Startup terminal", "Terminale di avvio"), oppure(s.cfg.Terminal, "auto"), (*sessione).cambiaTerminale},
-		{l.S("Performance profile", "Profilo prestazioni"), oppure(s.cfg.Profile, "auto"), (*sessione).cambiaProfilo},
+		{l.S("Startup terminal", "Terminale di avvio"), s.descriviTerminale(), (*sessione).cambiaTerminale},
+		{l.S("Performance profile", "Profilo prestazioni"), s.descriviProfilo(), (*sessione).cambiaProfilo},
 	}
 }
 
+// terminaliDiAvvio sono le scelte del terminale, nell'ordine in cui compaiono.
+// Il primo è il predefinito, ed è scritto per primo perché è quello che quasi
+// tutti devono tenere.
+var terminaliDiAvvio = []string{settings.TerminaleQuestaFinestra, "auto", "wt", "pwsh", "powershell", "cmd"}
+
+// descriviTerminale scrive per esteso dove si apre diskseer. "direct" e "auto"
+// sono i valori del file delle impostazioni, non parole da mostrare a chi usa
+// il programma.
+func (s *sessione) descriviTerminale() string {
+	l := s.lingua
+	switch s.cfg.Terminal {
+	case "", settings.TerminaleQuestaFinestra:
+		return l.S("this window", "questa finestra")
+	case "auto":
+		return l.S("Windows Terminal if available", "Terminale di Windows, se c'è")
+	case "wt":
+		return l.S("Windows Terminal", "Terminale di Windows")
+	case "pwsh":
+		return "PowerShell 7"
+	case "powershell":
+		return "Windows PowerShell"
+	case "cmd":
+		return l.S("Command Prompt", "Prompt dei comandi")
+	}
+	return s.cfg.Terminal
+}
+
 func (s *sessione) cambiaTerminale() {
-	values := []string{"auto", "direct", "wt", "pwsh", "powershell", "cmd"}
 	l := s.lingua
 	i := s.sottomenu(l.S("STARTUP TERMINAL", "TERMINALE DI AVVIO"), [][2]string{
-		{l.S("Automatic", "Automatico"), l.S("prefer Windows Terminal, with fallbacks", "preferisci Windows Terminal, con alternative")},
-		{l.S("Current console", "Console corrente"), l.S("never relaunch", "non rilanciare")},
-		{"Windows Terminal", l.S("when supported and available", "quando supportato e disponibile")},
-		{"PowerShell 7+", l.S("modern systems only", "solo sistemi moderni")},
-		{"Windows PowerShell", l.S("legacy-compatible shell", "shell compatibile con sistemi precedenti")},
-		{"cmd", l.S("classic command prompt", "prompt dei comandi classico")},
+		{l.S("This window", "Questa finestra"), l.S("diskseer stays where it opens (default)",
+			"diskseer resta dove si apre (predefinito)")},
+		{l.S("Automatic", "Automatico"), l.S("reopens in Windows Terminal if available; some antivirus programs flag it",
+			"si riapre in Terminale di Windows se c'è; alcuni antivirus lo segnalano")},
+		{l.S("Windows Terminal", "Terminale di Windows"), l.S("when installed", "se è installato")},
+		{"PowerShell 7", l.S("Windows 10 and 11 only", "solo Windows 10 e 11")},
+		{"Windows PowerShell", l.S("also on older Windows", "anche su Windows vecchi")},
+		{l.S("Command Prompt", "Prompt dei comandi"), "cmd"},
 	})
 	if i < 0 {
 		return
 	}
-	s.cfg.Terminal = values[i]
-	s.salva(l.S("Terminal preference applies at the next launch.", "La preferenza del terminale vale dal prossimo avvio."))
+	s.cfg.Terminal = terminaliDiAvvio[i]
+	s.salva(l.S("From the next launch diskseer opens in: ", "Dal prossimo avvio diskseer si apre in: ") +
+		s.descriviTerminale() + ".")
+}
+
+// descriviProfilo scrive il profilo per esteso, per la stessa ragione di
+// descriviTerminale.
+func (s *sessione) descriviProfilo() string {
+	l := s.lingua
+	switch s.cfg.Profile {
+	case "conservative":
+		return l.S("conservative", "conservativo")
+	case "balanced":
+		return l.S("balanced", "bilanciato")
+	case "fast":
+		return l.S("fast", "veloce")
+	}
+	return l.S("automatic", "automatico")
 }
 
 func (s *sessione) cambiaProfilo() {

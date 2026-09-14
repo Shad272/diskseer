@@ -64,7 +64,7 @@ func raccogli() (model.Snapshot, error) {
 
 func esegui() int {
 	var (
-		terminalFlag = flag.String("terminal", "auto", "terminal: auto, direct, wt, pwsh, powershell, cmd")
+		terminalFlag = flag.String("terminal", "direct", "where to run: direct (this window, default), auto, wt, pwsh, powershell, cmd")
 		direct       = flag.Bool("direct", false, "keep this console; never relaunch")
 		profileFlag  = flag.String("profile", "auto", "performance profile: auto, conservative, balanced, fast")
 		workersFlag  = flag.Int("workers", 0, "disk workers: 0 adaptive, 1-4 explicit with resource ceilings")
