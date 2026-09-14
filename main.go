@@ -198,9 +198,14 @@ func esegui() int {
 	// insieme a --watch, che è già una schermata interattiva per conto suo.
 	modalitaMenu := (*showMenu || (caps.OwnConsole && !scrittoDaRigaDiComando("menu") && !*showGUI && *htmlPath == "")) && !*asJSON && !*watch
 
-	// Privileges are requested only through the explicit menu action. Keep the
-	// historical --no-elevate flag accepted for existing scripts.
-	_ = noElevate
+	// Col doppio clic i privilegi si chiedono subito, prima di leggere i dischi:
+	// senza, SATA e USB restano al buio, e chi apre il programma una volta sola
+	// riceve una diagnosi a metà senza aver scelto niente. Se rifiuta, il
+	// programma prosegue e il referto lo dichiara parziale; il menu permette di
+	// riprovare. Vedi chiediPrivilegi per i casi in cui non si chiede.
+	if chiediPrivilegi(*noElevate, *asJSON, l) {
+		return 0
+	}
 
 	// La rotella gira solo se c'è uno schermo a guardarla. Con l'uscita
 	// rediretta su file i ritorni a capo lascerebbero una scia di rotelle
