@@ -136,3 +136,21 @@ func TestIPredefinitiScelgonoIlRiconoscimentoAutomatico(t *testing.T) {
 		t.Errorf("Symbols predefinito = %q, atteso %q", c.Symbols, SimboliAuto)
 	}
 }
+
+func TestInvalidFieldDoesNotApplyPartialConfiguration(t *testing.T) {
+	cartellaFinta(t)
+	path, err := Percorso()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Unmarshal assigns valid fields even when another field has the wrong type.
+	if err := os.WriteFile(path, []byte(`{"language":"it","colors":false,"interval":42}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := Carica(); got != Predefinite() {
+		t.Fatalf("invalid settings were partially applied: %+v", got)
+	}
+}

@@ -12,12 +12,13 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/shad272/diskseer/internal/collect"
@@ -25,9 +26,12 @@ import (
 	"github.com/shad272/diskseer/internal/gui"
 	"github.com/shad272/diskseer/internal/i18n"
 	"github.com/shad272/diskseer/internal/model"
+	"github.com/shad272/diskseer/internal/platform"
 	"github.com/shad272/diskseer/internal/report"
 	"github.com/shad272/diskseer/internal/rules"
 	"github.com/shad272/diskseer/internal/settings"
+	"github.com/shad272/diskseer/internal/terminal"
+	"github.com/shad272/diskseer/internal/tuning"
 )
 
 const version = "1.2.0"
@@ -37,31 +41,55 @@ const version = "1.2.0"
 // Il lavoro sta in esegui(), che restituisce il codice invece di chiamare
 // os.Exit da dentro: os.Exit termina il processo all'istante, e un os.Exit
 // sparso nel mezzo del programma salterebbe qualunque cosa venga dopo.
-func main() { os.Exit(esegui()) }
+func main() {
+	child, finish, err := terminal.Receive()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "diskseer:", err)
+		os.Exit(3)
+	}
+	terminalChild = child
+	code := esegui()
+	finish(code)
+	os.Exit(code)
+}
+
+var terminalChild bool
+var activeProfile tuning.Profile
+
+func raccogli() (model.Snapshot, error) {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+	return collect.CollectContext(ctx, activeProfile)
+}
 
 func esegui() int {
 	var (
-		lang        = flag.String("lang", "en", "report language: en or it")
-		asJSON      = flag.Bool("json", false, "print raw data as JSON instead of the report")
-		noColor     = flag.Bool("no-color", false, "disable ANSI colours")
-		showVersion = flag.Bool("version", false, "print the version and exit")
-		htmlPath    = flag.String("html", "", "save the report as an HTML page at the given path")
-		technician  = flag.String("technician", "", "name of whoever ran the diagnosis, printed on the report")
-		contact     = flag.String("contact", "", "contact details of whoever ran the diagnosis")
-		customer    = flag.String("customer", "", "customer name, printed on the report")
-		noElevate   = flag.Bool("no-elevate", false, "do not request administrator privileges at startup")
-		anonymous   = flag.Bool("anonymous", false, "strip make, model and timestamps from the machine data")
-		showGUI     = flag.Bool("gui", false, "open the report in the default browser")
-		watch       = flag.Bool("watch", false, "keep running and refresh the readings continuously")
-		interval    = flag.Duration("interval", 3*time.Second, "how often to refresh in watch mode (minimum 1s)")
-		showMenu    = flag.Bool("menu", false, "show the interactive menu instead of printing the report once")
-		plain       = flag.Bool("ascii", false, "use plain characters only, for consoles that cannot draw the rest")
-		unicode     = flag.Bool("unicode", false, "use the decorated characters even if the console was not recognised")
+		terminalFlag = flag.String("terminal", "auto", "terminal: auto, direct, wt, pwsh, powershell, cmd")
+		direct       = flag.Bool("direct", false, "keep this console; never relaunch")
+		profileFlag  = flag.String("profile", "auto", "performance profile: auto, conservative, balanced, fast")
+		workersFlag  = flag.Int("workers", 0, "disk workers: 0 adaptive, 1-4 explicit with resource ceilings")
+		diagnostics  = flag.Bool("diagnostics", false, "print capability and launch diagnostics as JSON, without reading disks")
+		lang         = flag.String("lang", "en", "report language: en or it")
+		asJSON       = flag.Bool("json", false, "print raw data as JSON instead of the report")
+		noColor      = flag.Bool("no-color", false, "disable ANSI colours")
+		showVersion  = flag.Bool("version", false, "print the version and exit")
+		htmlPath     = flag.String("html", "", "save the report as an HTML page at the given path")
+		technician   = flag.String("technician", "", "name of whoever ran the diagnosis, printed on the report")
+		contact      = flag.String("contact", "", "contact details of whoever ran the diagnosis")
+		customer     = flag.String("customer", "", "customer name, printed on the report")
+		noElevate    = flag.Bool("no-elevate", false, "do not request administrator privileges at startup")
+		anonymous    = flag.Bool("anonymous", false, "strip make, model and timestamps from the machine data")
+		showGUI      = flag.Bool("gui", false, "open the report in the default browser")
+		watch        = flag.Bool("watch", false, "keep running and refresh the readings continuously")
+		interval     = flag.Duration("interval", 3*time.Second, "how often to refresh in watch mode (minimum 1s)")
+		showMenu     = flag.Bool("menu", false, "show the interactive menu instead of printing the report once")
+		plain        = flag.Bool("ascii", false, "use plain characters only, for consoles that cannot draw the rest")
+		unicode      = flag.Bool("unicode", false, "use the decorated characters even if the console was not recognised")
 	)
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Println("diskseer", version)
+		fmt.Printf("diskseer %s (%s/%s, %s)\n", version, runtime.GOOS, runtime.GOARCH, runtime.Version())
 		return 0
 	}
 
@@ -72,19 +100,69 @@ func esegui() int {
 	// scrive un'opzione la sta chiedendo adesso, per questa esecuzione, e deve
 	// vincere su una scelta fatta settimane fa dentro un menu.
 	cfg := settings.Carica()
+	if scrittoDaRigaDiComando("terminal") {
+		cfg.Terminal = *terminalFlag
+	}
+	if scrittoDaRigaDiComando("profile") {
+		cfg.Profile = *profileFlag
+	}
+	if scrittoDaRigaDiComando("workers") {
+		cfg.Workers = *workersFlag
+	}
+	caps := platform.Detect()
+	var profileErr error
+	activeProfile, profileErr = tuning.Select(caps, cfg.Profile, cfg.Workers)
+	if profileErr != nil || !terminal.Valid(cfg.Terminal) {
+		fmt.Fprintln(os.Stderr, "diskseer: invalid terminal/profile/workers configuration", profileErr)
+		return 3
+	}
+	activeProfile.Apply()
+	req := terminal.Request{Preference: cfg.Terminal, Direct: *direct, Child: terminalChild, NonInteractive: *asJSON || *diagnostics, Explicit: scrittoDaRigaDiComando("terminal") && *terminalFlag != "auto"}
+	var candidates []terminal.Candidate
+	var discoveryLog []string
+	// No discovery subprocesses, new windows or log noise for pipes/scripts.
+	if *diagnostics || (caps.Console && caps.InputConsole && (caps.OwnConsole || req.Explicit) && !req.Direct && req.Preference != "direct" && !req.Child && !req.NonInteractive && !caps.InTerminal) {
+		candidates, discoveryLog = terminal.DiscoverDetailed(caps)
+	}
+	if *diagnostics {
+		kinds := []string{}
+		for _, c := range candidates {
+			kinds = append(kinds, c.Kind)
+		}
+		_ = json.NewEncoder(os.Stdout).Encode(struct {
+			Capabilities platform.Capabilities
+			Profile      tuning.Profile
+			Candidates   []string
+			Log          []string
+		}{caps, activeProfile, kinds, discoveryLog})
+		return 0
+	}
+	candidates, _ = terminal.Select(caps, req, candidates)
+	if len(candidates) > 0 {
+		for _, entry := range discoveryLog {
+			fmt.Fprintln(os.Stderr, "diskseer: terminal:", entry)
+		}
+		args := append([]string(nil), os.Args[1:]...)
+		if caps.OwnConsole && !scrittoDaRigaDiComando("menu") && !*watch && !*showGUI && *htmlPath == "" {
+			args = append(args, "--menu")
+		}
+		if launched, code := terminal.Launch(candidates, args, caps.OwnConsole, func(msg string) { fmt.Fprintln(os.Stderr, "diskseer: terminal:", msg) }); launched {
+			return code
+		}
+	}
 	if scrittoDaRigaDiComando("lang") {
 		cfg.Language = *lang
 	}
 	if scrittoDaRigaDiComando("interval") {
 		cfg.Interval = interval.String()
 	}
-	if *technician != "" {
+	if scrittoDaRigaDiComando("technician") {
 		cfg.Technician = *technician
 	}
-	if *contact != "" {
+	if scrittoDaRigaDiComando("contact") {
 		cfg.Contact = *contact
 	}
-	if *customer != "" {
+	if scrittoDaRigaDiComando("customer") {
 		cfg.Customer = *customer
 	}
 	// I colori spenti dalla riga di comando restano fuori dalle impostazioni di
@@ -118,11 +196,11 @@ func esegui() int {
 	// Il menu compare solo quando c'è una persona davanti: con un doppio clic,
 	// o quando lo si chiede. Mai in modalità JSON, che serve agli script, e mai
 	// insieme a --watch, che è già una schermata interattiva per conto suo.
-	modalitaMenu := (*showMenu || report.LanciatoDaEsploraRisorse()) && !*asJSON && !*watch
+	modalitaMenu := (*showMenu || (caps.OwnConsole && !scrittoDaRigaDiComando("menu") && !*showGUI && *htmlPath == "")) && !*asJSON && !*watch
 
-	if chiediPrivilegi(*noElevate, *asJSON, l) {
-		return 0
-	}
+	// Privileges are requested only through the explicit menu action. Keep the
+	// historical --no-elevate flag accepted for existing scripts.
+	_ = noElevate
 
 	// La rotella gira solo se c'è uno schermo a guardarla. Con l'uscita
 	// rediretta su file i ritorni a capo lascerebbero una scia di rotelle
@@ -131,9 +209,11 @@ func esegui() int {
 	if ansiOK && !*asJSON {
 		attesa = report.Printer{W: uscita, Color: colore, Lang: l}.
 			Attendi(l.S("loading", "caricamento"))
+	} else if !*asJSON {
+		fmt.Fprintln(uscita, l.S("Reading inventory and drive counters. Ctrl+C cancels.", "Lettura inventario e contatori dei dischi. Ctrl+C annulla."))
 	}
 
-	snap, err := collect.Collect()
+	snap, err := raccogli()
 	attesa.Ferma()
 
 	if err != nil && !modalitaMenu {
@@ -177,6 +257,7 @@ func esegui() int {
 			findings:         findings,
 			cfg:              cfg,
 			lingua:           l,
+			anonima:          *anonymous,
 			ansi:             ansiOK,
 			coloriConsentiti: coloriConsentiti,
 			consolaRicca:     consolaRicca,
@@ -200,8 +281,9 @@ func esegui() int {
 	}
 
 	percorsoHTML := *htmlPath
+	erroreOutput := false
 	if percorsoHTML == "" && *showGUI {
-		percorsoHTML = percorsoRefertoPredefinito()
+		percorsoHTML = (&sessione{cfg: cfg}).percorsoAccanto(nomeReferto())
 	}
 	if percorsoHTML != "" {
 		if err := report.WriteHTMLLang(percorsoHTML, l, snap, findings, opts); err != nil {
@@ -209,6 +291,7 @@ func esegui() int {
 			// fatta: si segnala e si continua a stamparla a schermo.
 			fmt.Fprintln(os.Stderr, "diskseer: HTML report not saved:", err)
 			percorsoHTML = ""
+			erroreOutput = true
 		}
 	}
 
@@ -218,7 +301,11 @@ func esegui() int {
 		if *showGUI && percorsoHTML != "" {
 			apriNelBrowser(percorsoHTML)
 		}
-		return ciclaDalVivo(stampante, &snap, ansiOK, cfg.Durata(), percorsoHTML, opts)
+		codice := ciclaDalVivo(stampante, &snap, ansiOK, cfg.Durata(), percorsoHTML, opts)
+		if erroreOutput {
+			return 3
+		}
+		return codice
 	}
 
 	stampante.Print(snap, findings)
@@ -232,6 +319,9 @@ func esegui() int {
 
 	// Codice di uscita utilizzabile negli script: permette di far girare
 	// diskseer su più macchine e raccogliere solo quelle che hanno problemi.
+	if erroreOutput {
+		return 3
+	}
 	return codiceEsito(findings)
 }
 
@@ -267,26 +357,9 @@ func codiceEsito(findings []rules.Finding) int {
 	return 0
 }
 
-// percorsoRefertoPredefinito sceglie dove salvare il referto quando nessuno
-// l'ha indicato.
-//
-// Accanto all'eseguibile, non nella cartella di lavoro: chi avvia il programma
-// con un doppio clic non sa nemmeno quale sia la cartella di lavoro, mentre
-// sa benissimo dov'è il file che ha appena cliccato. Se il percorso
-// dell'eseguibile non è ricavabile — caso raro ma possibile — si ripiega sulla
-// cartella corrente invece di rinunciare al referto.
-//
-// Il nome porta data e ora perché su una macchina si fanno più controlli, e
-// un referto che sovrascrive il precedente cancella proprio il confronto che
-// serve a capire se un disco sta peggiorando.
-func percorsoRefertoPredefinito() string {
-	nome := "diskseer-report-" + time.Now().Format("2006-01-02-1504") + ".html"
-
-	exe, err := os.Executable()
-	if err != nil {
-		return nome
-	}
-	return filepath.Join(filepath.Dir(exe), nome)
+// nomeReferto distingue anche diagnosi consecutive nello stesso minuto.
+func nomeReferto() string {
+	return "diskseer-report-" + time.Now().Format("2006-01-02-150405.000000000") + ".html"
 }
 
 // chiediPrivilegi rilancia il programma come amministratore quando serve, e
@@ -358,9 +431,8 @@ func ciclaDalVivo(stampante report.Printer, snap *model.Snapshot, ridisegna bool
 	// Ctrl+C non deve limitarsi a terminare il processo: il cursore è stato
 	// nascosto, e un terminale che resta senza cursore sembra bloccato anche
 	// dopo che il programma è finito.
-	interruzione := make(chan os.Signal, 1)
-	signal.Notify(interruzione, os.Interrupt)
-	defer signal.Stop(interruzione)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
 	ticchettio := time.NewTicker(intervallo)
 	defer ticchettio.Stop()
@@ -380,16 +452,25 @@ func ciclaDalVivo(stampante report.Printer, snap *model.Snapshot, ridisegna bool
 		if percorsoHTML != "" {
 			// Un referto non scritto non deve fermare il ciclo: la vista a
 			// terminale continua a funzionare, ed è quella che si sta guardando.
-			_ = report.WriteHTMLLive(percorsoHTML, l, *snap, findings, opts, intervallo)
+			if err := report.WriteHTMLLive(percorsoHTML, l, *snap, findings, opts, intervallo); err != nil {
+				fmt.Fprintln(stampante.W, l.S("HTML report not updated:", "Referto HTML non aggiornato:"), err)
+			}
 		}
 
 		select {
-		case <-interruzione:
+		case <-ctx.Done():
 			ripristina()
 			fmt.Fprintln(stampante.W)
+			// L'ultima pagina rimane consultabile senza ricaricarsi per sempre.
+			if percorsoHTML != "" {
+				if err := report.WriteHTMLLang(percorsoHTML, l, *snap, findings, opts); err != nil {
+					fmt.Fprintln(stampante.W, l.S("HTML report not saved:", "Referto HTML non salvato:"), err)
+					return 3
+				}
+			}
 			return codiceEsito(findings)
 		case <-ticchettio.C:
-			collect.Refresh(snap)
+			_ = collect.RefreshContext(ctx, snap, activeProfile)
 		}
 	}
 }

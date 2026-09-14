@@ -12,13 +12,14 @@ import (
 )
 
 type Snapshot struct {
-	Time     time.Time `json:"time"`
-	Elevated bool      `json:"elevated"`
-	System   System    `json:"system"`
-	Disks    []Disk    `json:"disks"`
-	Volumes  []Volume  `json:"volumes"`
-	Battery  *Battery  `json:"battery,omitempty"`
-	Thermals []Thermal `json:"thermals,omitempty"`
+	CollectionNotes []string  `json:"collectionNotes,omitempty"`
+	Time            time.Time `json:"time"`
+	Elevated        bool      `json:"elevated"`
+	System          System    `json:"system"`
+	Disks           []Disk    `json:"disks"`
+	Volumes         []Volume  `json:"volumes"`
+	Battery         *Battery  `json:"battery,omitempty"`
+	Thermals        []Thermal `json:"thermals,omitempty"`
 }
 
 type System struct {
@@ -35,6 +36,7 @@ type System struct {
 }
 
 type Disk struct {
+	ReadError    string `json:"readError,omitempty"`
 	DeviceID     string `json:"deviceId"`
 	Model        string `json:"model"`
 	MediaType    string `json:"mediaType"` // HDD, SSD, Unspecified
@@ -63,6 +65,7 @@ type Disk struct {
 }
 
 type Volume struct {
+	ReadError    string `json:"readError,omitempty"`
 	DriveLetter  string `json:"driveLetter"`
 	FileSystem   string `json:"fileSystem"`
 	HealthStatus string `json:"healthStatus"`

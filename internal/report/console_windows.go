@@ -152,6 +152,27 @@ func terminaleCheSiAnnuncia() bool {
 
 var procGetConsoleProcessList = kernel32.NewProc("GetConsoleProcessList")
 
+// The visible window, not the scrollback buffer, bounds each live frame.
+func consoleDimensions() (int, int) {
+	var info struct {
+		Size, Cursor struct{ X, Y int16 }
+		Attributes   uint16
+		Window       struct{ Left, Top, Right, Bottom int16 }
+		Maximum      struct{ X, Y int16 }
+	}
+	p := kernel32.NewProc("GetConsoleScreenBufferInfo")
+	if p.Find() == nil {
+		if r, _, _ := p.Call(os.Stdout.Fd(), uintptr(unsafe.Pointer(&info))); r != 0 {
+			columns := int(info.Window.Right-info.Window.Left) + 1
+			rows := int(info.Window.Bottom-info.Window.Top) + 1
+			if columns > 0 && rows > 0 {
+				return columns, rows
+			}
+		}
+	}
+	return 80, 25
+}
+
 // LanciatoDaEsploraRisorse dice se la finestra del terminale è stata creata
 // apposta per questo programma, cioè se l'utente ha fatto doppio clic
 // sull'eseguibile invece di scrivere il comando in un terminale già aperto.

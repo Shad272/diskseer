@@ -30,5 +30,6 @@ func Open(path string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("apertura interfaccia: %w", err)
 	}
+	go func() { _ = cmd.Wait() }()
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/rules"
@@ -29,6 +28,8 @@ const (
 	pulisciDaQui    = "\033[J"
 	nascondiCursore = "\033[?25l"
 	mostraCursore   = "\033[?25h"
+	schermoLive     = "\033[?1049h"
+	schermoNormale  = "\033[?1049l"
 
 	maxVerdettiMostrati = 8
 	larghezzaBarra      = 20
@@ -47,6 +48,9 @@ type LiveOptions struct {
 	// Quando l'uscita è rediretta su file va invece lasciata scorrere: le
 	// sequenze di controllo finirebbero dentro il file come caratteri strani.
 	Ridisegna bool
+
+	// Zero uses the current visible console dimensions, re-read each frame.
+	Columns, Rows int
 }
 
 // PrepareLive prepara il terminale e restituisce la funzione che lo rimette
@@ -59,18 +63,20 @@ func PrepareLive(w io.Writer, ridisegna bool) func() {
 	if !ridisegna {
 		return func() {}
 	}
-	fmt.Fprint(w, nascondiCursore)
-	return func() { fmt.Fprint(w, mostraCursore) }
+	fmt.Fprint(w, schermoLive+nascondiCursore)
+	restored := false
+	return func() {
+		if !restored {
+			fmt.Fprint(w, mostraCursore+schermoNormale)
+			restored = true
+		}
+	}
 }
 
 // PrintLive disegna una schermata intera di stato.
 func (p Printer) PrintLive(snap model.Snapshot, fs []rules.Finding, opt LiveOptions) {
 	l := p.Lang
 	var b strings.Builder
-
-	if opt.Ridisegna {
-		b.WriteString(cursoreAOrigine)
-	}
 
 	p.liveIntestazione(&b, snap, opt)
 	p.liveEsito(&b, fs, opt.Elevato)
@@ -85,13 +91,27 @@ func (p Printer) PrintLive(snap model.Snapshot, fs []rules.Finding, opt LiveOpti
 	b.WriteString(p.c(dim, l.S("Press Ctrl+C to stop", "Premi Ctrl+C per fermare")))
 	b.WriteString("\n")
 
-	if opt.Ridisegna {
-		// Cancella ciò che restava della schermata precedente: senza,
-		// passando da un ciclo con sei verdetti a uno con quattro,
-		// resterebbero a schermo le due righe vecchie.
-		b.WriteString(pulisciDaQui)
+	if !opt.Ridisegna {
+		fmt.Fprint(p.W, b.String())
+		return
 	}
-	fmt.Fprint(p.W, b.String())
+	columns, rows := consoleDimensions()
+	if opt.Columns > 0 {
+		columns = opt.Columns
+	}
+	if opt.Rows > 0 {
+		rows = opt.Rows
+	}
+	w, content := p.W, b.String()
+	// Apply ASCII substitutions before measuring: an ellipsis becomes three
+	// cells, an arrow two. The usual output wrapper would expand them too late.
+	if plain, ok := w.(scrittorePiano); ok {
+		content = versionePiana.Replace(content)
+		w = plain.w
+	}
+	note := l.S("More rows: enlarge the window or open the full report",
+		"Altre righe: ingrandisci la finestra o apri il referto completo")
+	fmt.Fprint(w, liveFrame(content, columns, rows, note))
 }
 
 func (p Printer) liveIntestazione(b *strings.Builder, snap model.Snapshot, opt LiveOptions) {
@@ -198,9 +218,9 @@ func (p Printer) liveDischi(b *strings.Builder, snap model.Snapshot) {
 
 		capacita := fmt.Sprintf("%.1f GB", float64(d.SizeBytes)/(1024*1024*1024))
 
-		fmt.Fprintf(b, "  %s%-*s %-*s %-*s %*s  %s  %s  %s\n",
-			segno, colTipo, tipo, colBus, d.BusType,
-			colModello, troncaColonna(d.Model, colModello),
+		fmt.Fprintf(b, "  %s%s %s %s %*s  %s  %s  %s\n",
+			segno, padCells(tipo, colTipo), padCells(d.BusType, colBus),
+			padCells(d.Model, colModello),
 			colCapacita, capacita, temp, ore, p.saluteDisco(d))
 	}
 }
@@ -213,11 +233,7 @@ func (p Printer) liveDischi(b *strings.Builder, snap model.Snapshot) {
 // capacità, temperatura e ore di quella riga soltanto. Qui si usano i tre
 // punti fin dall'inizio, così la larghezza è la stessa in entrambe le grafiche.
 func troncaColonna(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	r := []rune(s)
-	return string(r[:n-3]) + "..."
+	return fitCells(s, n)
 }
 
 // saluteDisco riassume in poche parole lo stato del disco: quanto è consumato,
@@ -229,8 +245,9 @@ func troncaColonna(s string, n int) string {
 // disco praticamente nuovo.
 func (p Printer) saluteDisco(d model.Disk) string {
 	l := p.Lang
-	if d.NVMe != nil && d.NVMe.CriticalWarning != 0 {
-		return p.c(red, l.S("FAULT", "GUASTO"))
+	stato, sev := statoDisco(d, l)
+	if sev >= rules.SevWarn || d.ReadError != "" {
+		return p.c(p.sevColor(sev), stato)
 	}
 	if d.WearPercent != nil {
 		v := *d.WearPercent
@@ -243,10 +260,7 @@ func (p Printer) saluteDisco(d model.Disk) string {
 		}
 		return p.c(colore, l.F("wear %d%%", "usura %d%%", v))
 	}
-	if d.HealthStatus != "" && d.HealthStatus != "Healthy" {
-		return p.c(yellow, d.HealthStatus)
-	}
-	return p.c(green, "ok")
+	return p.c(p.sevColor(sev), stato)
 }
 
 func (p Printer) liveVolumi(b *strings.Builder, snap model.Snapshot) {
@@ -266,6 +280,9 @@ func (p Printer) liveVolumi(b *strings.Builder, snap model.Snapshot) {
 		nota := ""
 		if v.OperationalStatus != "" && v.OperationalStatus != "OK" {
 			nota = "  " + p.c(yellow, v.OperationalStatus)
+		}
+		if v.ReadError != "" {
+			nota += "  " + p.c(yellow, l.S("not refreshed", "non aggiornato"))
 		}
 
 		fmt.Fprintf(b, "    %s:  %-6s %s %s %s%s\n",
@@ -307,9 +324,9 @@ func (p Printer) liveVerdetti(b *strings.Builder, fs []rules.Finding) {
 					len(fs)-maxVerdettiMostrati)))
 			return
 		}
-		fmt.Fprintf(b, "  %s %-22s %s\n",
+		fmt.Fprintf(b, "  %s %s %s\n",
 			p.c(p.sevColor(f.Severity), "●"),
-			p.c(dim, trunc(f.Area+" · "+f.Target, 22)),
+			p.c(dim, padCells(f.Area+" · "+f.Target, 22)),
 			trunc(f.Title, 46))
 	}
 }

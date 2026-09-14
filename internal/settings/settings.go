@@ -17,6 +17,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/shad272/diskseer/internal/safefile"
 )
 
 // Config è ciò che il menu può cambiare e ritrovare al prossimo avvio.
@@ -25,6 +27,9 @@ import (
 // apre per correggerlo a mano deve capire cosa sta leggendo, e la lingua del
 // progetto verso l'esterno è l'inglese.
 type Config struct {
+	Terminal   string `json:"terminal,omitempty"`
+	Profile    string `json:"profile,omitempty"`
+	Workers    int    `json:"workers,omitempty"`
 	Language   string `json:"language"`
 	Interval   string `json:"interval"`
 	Technician string `json:"technician,omitempty"`
@@ -107,7 +112,9 @@ func Carica() Config {
 	// vedersi spegnere i colori a tutti quelli che hanno un file salvato prima
 	// che quell'impostazione esistesse: le chiavi assenti restano al valore di
 	// partenza invece di diventare zero.
-	_ = json.Unmarshal(raw, &c)
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return Predefinite()
+	}
 	return c
 }
 
@@ -125,7 +132,7 @@ func (c Config) Salva() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(percorso, append(raw, '\n'), 0o600); err != nil {
+	if err := safefile.Write(percorso, append(raw, '\n')); err != nil {
 		return "", err
 	}
 	return percorso, nil

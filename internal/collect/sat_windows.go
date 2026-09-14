@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"syscall"
+	"unsafe"
 
 	"github.com/shad272/diskseer/internal/model"
 )
@@ -37,7 +38,11 @@ const (
 	// le regole di Go sui puntatori sconsigliano.
 	ioctlScsiPassThrough = 0x0004D004
 
-	sizeScsiPassThrough = 56 // dimensione della struttura su sistemi a 64 bit
+	pointerSize         = int(unsafe.Sizeof(uintptr(0)))
+	sizeScsiPassThrough = 44 + (pointerSize-4)*3 // 44 on x86, 56 on x64/ARM64
+	satBufferField      = 20 + (pointerSize - 4) // ULONG_PTR alignment
+	satSenseField       = satBufferField + pointerSize
+	satCDBField         = satSenseField + 4
 	senseBufferSize     = 32 // dove il dispositivo scrive il motivo di un rifiuto
 	senseBufferOffset   = sizeScsiPassThrough
 	satDataOffset       = sizeScsiPassThrough + senseBufferSize
@@ -118,7 +123,7 @@ func readSMARTViaSAT(deviceID string) (*model.SMARTData, error) {
 func inviaComandoSAT(h syscall.Handle, cdb []byte) (*model.SMARTData, error) {
 	buf := make([]byte, satDataOffset+satDataSize)
 
-	binary.LittleEndian.PutUint16(buf[0:], sizeScsiPassThrough)
+	binary.LittleEndian.PutUint16(buf[0:], uint16(sizeScsiPassThrough))
 	buf[6] = byte(len(cdb))                                // CdbLength
 	buf[7] = senseBufferSize                               // SenseInfoLength
 	buf[8] = scsiDataIn                                    // DataIn
@@ -127,9 +132,13 @@ func inviaComandoSAT(h syscall.Handle, cdb []byte) (*model.SMARTData, error) {
 	// DataBufferOffset è uno scostamento dall'inizio di questa struttura, non
 	// un puntatore: è il motivo per cui questa variante è più semplice da usare
 	// da Go in sicurezza.
-	binary.LittleEndian.PutUint64(buf[24:], satDataOffset)
-	binary.LittleEndian.PutUint32(buf[32:], senseBufferOffset)
-	copy(buf[36:52], cdb)
+	if pointerSize == 8 {
+		binary.LittleEndian.PutUint64(buf[satBufferField:], uint64(satDataOffset))
+	} else {
+		binary.LittleEndian.PutUint32(buf[satBufferField:], uint32(satDataOffset))
+	}
+	binary.LittleEndian.PutUint32(buf[satSenseField:], uint32(senseBufferOffset))
+	copy(buf[satCDBField:satCDBField+16], cdb)
 
 	var returned uint32
 	err := syscall.DeviceIoControl(
@@ -140,6 +149,9 @@ func inviaComandoSAT(h syscall.Handle, cdb []byte) (*model.SMARTData, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("comando SAT (%d byte) rifiutato: %w", len(cdb), err)
+	}
+	if returned < uint32(satDataOffset+satDataSize) {
+		return nil, fmt.Errorf("incomplete SAT response: %d bytes", returned)
 	}
 
 	// ScsiStatus diverso da zero significa che il ponte o il disco hanno

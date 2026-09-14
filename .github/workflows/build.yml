@@ -1,33 +1,61 @@
-# Compila e collauda a ogni modifica, e allega il binario a ogni release.
-#
-# Serve a due cose: chi guarda il progetto vede subito se i test passano, e le
-# release contengono un eseguibile compilato da GitHub invece che dal portatile
-# di qualcuno — cosa che chiunque può verificare guardando il registro.
+# Build only the checked-out sources. This workflow is not run by local builds.
 name: build
-
 on:
   push:
     branches: [main]
   pull_request:
   release:
     types: [published]
-
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {edition: modern, go: '1.27.1', arch: amd64}
+          - {edition: modern, go: '1.27.1', arch: '386'}
+          - {edition: modern, go: '1.27.1', arch: arm64}
+          - {edition: legacy, go: '1.20.14', arch: amd64}
+          - {edition: legacy, go: '1.20.14', arch: '386'}
+    env:
+      GOOS: windows
+      GOARCH: ${{ matrix.arch }}
+      GOAMD64: v1
+      GO386: softfloat
+      CGO_ENABLED: '0'
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: ${{ matrix.go }}
+          cache: false
       - run: go vet ./...
-      - run: go test ./...
-      - run: go build -o diskseer.exe .
+      - if: matrix.arch != 'arm64'
+        run: go test ./...
+      - if: matrix.arch != 'arm64'
+        run: go test ./internal/terminal -run TestRealShell -count=1 -timeout=45s
+        env:
+          DISKSEER_LAUNCH_TESTS: '1'
+      - if: matrix.arch == 'amd64' && matrix.edition == 'modern'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - if: matrix.arch == 'amd64' && matrix.edition == 'modern'
+        run: |
+          node --test tools/report-ui.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          powershell.exe -NoProfile -File tools/test-probe.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          powershell.exe -NoProfile -File tools/test-terminal-discovery.ps1
+      - run: go build -trimpath -buildvcs=false -ldflags "-s -w" -o diskseer-${{ matrix.edition }}-${{ matrix.arch }}.exe .
       - uses: actions/upload-artifact@v4
         with:
-          name: diskseer-windows-amd64
-          path: diskseer.exe
-
+          name: diskseer-${{ matrix.edition }}-${{ matrix.arch }}
+          path: diskseer-${{ matrix.edition }}-${{ matrix.arch }}.exe
   release:
     if: github.event_name == 'release'
     needs: test
@@ -35,11 +63,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/download-artifact@v4
         with:
-          go-version: '1.22'
-      - run: go build -ldflags "-s -w" -o diskseer.exe .
+          pattern: diskseer-*
+          merge-multiple: true
+          path: dist
+      - run: |
+          Get-ChildItem dist/*.exe | ForEach-Object { ((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower() + '  ' + $_.Name) } | Set-Content dist/SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
-          files: diskseer.exe
+          files: |
+            dist/*.exe
+            dist/SHA256SUMS.txt

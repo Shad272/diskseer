@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/shad272/diskseer/internal/i18n"
+	"github.com/shad272/diskseer/internal/platform"
 	"github.com/shad272/diskseer/internal/report"
 	"github.com/shad272/diskseer/internal/settings"
+	"github.com/shad272/diskseer/internal/tuning"
 )
 
 // Le impostazioni, viste da chi le cambia.
@@ -88,7 +90,45 @@ func (s *sessione) impostazioni() []impostazione {
 		{l.S("Colours", "Colori"), colori, (*sessione).cambiaColori},
 		{l.S("Report folder", "Cartella dei referti"), cartella, (*sessione).cambiaCartella},
 		{l.S("Graphics", "Grafica"), s.descriviGrafica(), (*sessione).cambiaGrafica},
+		{l.S("Startup terminal", "Terminale di avvio"), oppure(s.cfg.Terminal, "auto"), (*sessione).cambiaTerminale},
+		{l.S("Performance profile", "Profilo prestazioni"), oppure(s.cfg.Profile, "auto"), (*sessione).cambiaProfilo},
 	}
+}
+
+func (s *sessione) cambiaTerminale() {
+	values := []string{"auto", "direct", "wt", "pwsh", "powershell", "cmd"}
+	l := s.lingua
+	i := s.sottomenu(l.S("STARTUP TERMINAL", "TERMINALE DI AVVIO"), [][2]string{
+		{l.S("Automatic", "Automatico"), l.S("prefer Windows Terminal, with fallbacks", "preferisci Windows Terminal, con alternative")},
+		{l.S("Current console", "Console corrente"), l.S("never relaunch", "non rilanciare")},
+		{"Windows Terminal", l.S("when supported and available", "quando supportato e disponibile")},
+		{"PowerShell 7+", l.S("modern systems only", "solo sistemi moderni")},
+		{"Windows PowerShell", l.S("legacy-compatible shell", "shell compatibile con sistemi precedenti")},
+		{"cmd", l.S("classic command prompt", "prompt dei comandi classico")},
+	})
+	if i < 0 {
+		return
+	}
+	s.cfg.Terminal = values[i]
+	s.salva(l.S("Terminal preference applies at the next launch.", "La preferenza del terminale vale dal prossimo avvio."))
+}
+
+func (s *sessione) cambiaProfilo() {
+	values := []string{"auto", "conservative", "balanced", "fast"}
+	l := s.lingua
+	i := s.sottomenu(l.S("PERFORMANCE", "PRESTAZIONI"), [][2]string{
+		{l.S("Automatic", "Automatico"), l.S("adapt to available memory and CPUs", "adatta a memoria disponibile e CPU")},
+		{l.S("Conservative", "Conservativo"), l.S("one device at a time", "un dispositivo alla volta")},
+		{l.S("Balanced", "Bilanciato"), l.S("up to two devices", "fino a due dispositivi")},
+		{l.S("Fast", "Veloce"), l.S("up to four devices, with resource limits", "fino a quattro dispositivi, con limiti di risorse")},
+	})
+	if i < 0 {
+		return
+	}
+	s.cfg.Profile = values[i]
+	activeProfile, _ = tuning.Select(platform.Detect(), s.cfg.Profile, s.cfg.Workers)
+	activeProfile.Apply()
+	s.salva(l.S("Performance profile updated.", "Profilo prestazioni aggiornato."))
 }
 
 func (s *sessione) mostraImpostazioni(elenco []impostazione) {

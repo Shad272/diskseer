@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shad272/diskseer/internal/collect"
 	"github.com/shad272/diskseer/internal/elevate"
 	"github.com/shad272/diskseer/internal/gui"
 	"github.com/shad272/diskseer/internal/i18n"
 	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/report"
 	"github.com/shad272/diskseer/internal/rules"
+	"github.com/shad272/diskseer/internal/safefile"
 	"github.com/shad272/diskseer/internal/settings"
 )
 
@@ -52,6 +52,7 @@ type sessione struct {
 	findings []rules.Finding
 	cfg      settings.Config
 	lingua   i18n.Lingua
+	anonima  bool
 
 	// I colori dipendono da tre cose diverse, e tenerle separate è ciò che
 	// evita di confondere una capacità con una preferenza:
@@ -111,7 +112,31 @@ func (s *sessione) stampante() report.Printer {
 //
 // Serve dopo un cambio di lingua: i verdetti contengono frasi già tradotte, e
 // senza questo passaggio il menu parlerebbe italiano sopra un referto inglese.
-func (s *sessione) ricalcola() { s.findings = rules.Run(s.snap, s.lingua) }
+func (s *sessione) ricalcola() {
+	if s.anonima {
+		s.snap.Anonimizza()
+	}
+	s.findings = rules.Run(s.snap, s.lingua)
+}
+
+func (s *sessione) codiceUscita() int {
+	if s.erroreRaccolta != nil {
+		return 3
+	}
+	return codiceEsito(s.findings)
+}
+
+// Una raccolta fallita non deve diventare un referto vuoto apparentemente sano,
+// né far esportare i risultati precedenti come se fossero quelli attuali.
+func (s *sessione) datiDisponibili() bool {
+	if s.erroreRaccolta == nil {
+		return true
+	}
+	fmt.Fprintln(s.out(), s.lingua.S(
+		"Collection failed. Run the diagnosis again before using these results.",
+		"Raccolta fallita. Rifai la diagnosi prima di utilizzare questi risultati."))
+	return false
+}
 
 func (s *sessione) opzioniHTML() report.HTMLOptions {
 	return report.HTMLOptions{
@@ -243,13 +268,13 @@ func eseguiMenu(s *sessione) int {
 
 		scelta, ok := s.chiediNumero()
 		if !ok {
-			return codiceEsito(s.findings)
+			return s.codiceUscita()
 		}
 		if scelta == "" {
 			continue
 		}
 		if scelta == "0" || strings.EqualFold(scelta, "q") {
-			return codiceEsito(s.findings)
+			return s.codiceUscita()
 		}
 
 		i, ok := indiceVoce(scelta, len(voci))
@@ -258,7 +283,7 @@ func eseguiMenu(s *sessione) int {
 			continue
 		}
 		if voci[i].fai(s) {
-			return codiceEsito(s.findings)
+			return s.codiceUscita()
 		}
 	}
 }
@@ -340,6 +365,9 @@ func (s *sessione) mostraMenu(voci []voce) {
 // file: la pagina nel browser si ricarica da sola e mostra gli stessi numeri
 // del terminale.
 func vaDalVivo(s *sessione) bool {
+	if !s.datiDisponibili() {
+		return false
+	}
 	if s.referto != "" {
 		fmt.Fprintf(s.out(), "\n  %s\n", s.stampante().C(report.Dim, s.lingua.S(
 			"The open report will keep updating too.",
@@ -351,8 +379,11 @@ func vaDalVivo(s *sessione) bool {
 }
 
 func apriReferto(s *sessione) bool {
+	if !s.datiDisponibili() {
+		return false
+	}
 	l := s.lingua
-	percorso := s.percorsoAccanto("diskseer-report-" + time.Now().Format("2006-01-02-1504") + ".html")
+	percorso := s.percorsoAccanto(nomeReferto())
 
 	if err := report.WriteHTMLLang(percorso, l, s.snap, s.findings, s.opzioniHTML()); err != nil {
 		s.avviso(err)
@@ -380,7 +411,7 @@ func rifaiLaDiagnosi(s *sessione) bool {
 	if s.ansi {
 		attesa = s.stampante().Attendi(l.S("reading the drives", "lettura dei dischi"))
 	}
-	snap, err := collect.Collect()
+	snap, err := raccogli()
 	attesa.Ferma()
 
 	if err != nil {
@@ -396,6 +427,9 @@ func rifaiLaDiagnosi(s *sessione) bool {
 }
 
 func mostraDettagli(s *sessione) bool {
+	if !s.datiDisponibili() {
+		return false
+	}
 	s.stampante().PrintDetails(s.snap)
 	return false
 }
@@ -407,6 +441,9 @@ func mostraDettagli(s *sessione) bool {
 // orari di accensione, chi lo manda regalerebbe la scheda di una macchina che
 // spesso non è nemmeno sua. I numeri su cui si ragiona restano tutti.
 func esportaDati(s *sessione) bool {
+	if !s.datiDisponibili() {
+		return false
+	}
 	l := s.lingua
 
 	copia := s.snap.Clona()
@@ -417,8 +454,8 @@ func esportaDati(s *sessione) bool {
 		s.avviso(err)
 		return false
 	}
-	percorso := s.percorsoAccanto("diskseer-data-" + time.Now().Format("2006-01-02-1504") + ".json")
-	if err := os.WriteFile(percorso, append(raw, '\n'), 0o600); err != nil {
+	percorso := s.percorsoAccanto("diskseer-data-" + time.Now().Format("2006-01-02-150405.000000000") + ".json")
+	if err := safefile.Write(percorso, append(raw, '\n')); err != nil {
 		s.avviso(err)
 		return false
 	}

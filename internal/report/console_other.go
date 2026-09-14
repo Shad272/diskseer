@@ -17,3 +17,5 @@ func ConsolaDisegnaSimboli() bool { return true }
 
 // SospendiModificaRapida riguarda solo la console di Windows.
 func SospendiModificaRapida() func() { return func() {} }
+
+func consoleDimensions() (int, int) { return 80, 25 }

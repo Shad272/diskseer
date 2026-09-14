@@ -1,16 +1,66 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/shad272/diskseer/internal/i18n"
+	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/settings"
 )
+
+func TestAnonymousSessionProtectsNewCollectionBeforeRendering(t *testing.T) {
+	var screen bytes.Buffer
+	s := sessioneDiProva(i18n.IT, &screen)
+	s.anonima = true
+	for i := 0; i < 2; i++ {
+		s.snap = model.Snapshot{
+			System: model.System{Manufacturer: "PRIVATE-MAKER", Model: "PRIVATE-PC"},
+			Disks:  []model.Disk{{Model: "PRIVATE-DRIVE", HealthStatus: "Unhealthy"}},
+		}
+		s.ricalcola()
+		s.stampante().Print(s.snap, s.findings)
+		if strings.Contains(screen.String(), "PRIVATE-") {
+			t.Fatal("newly collected identity leaked through the report or findings")
+		}
+		if len(s.findings) == 0 {
+			t.Fatal("anonymisation removed diagnostic findings")
+		}
+	}
+}
+
+func TestFailedCollectionCannotExportOrReportSuccess(t *testing.T) {
+	for _, exit := range []string{"0\n", "q\n", ""} {
+		var screen bytes.Buffer
+		s := sessioneDiProva(i18n.IT, &screen)
+		s.erroreRaccolta = errors.New("collection unavailable")
+		s.cfg.ReportDir = t.TempDir()
+		for _, action := range []func(*sessione) bool{vaDalVivo, apriReferto, mostraDettagli, esportaDati} {
+			if action(s) {
+				t.Fatal("failed action closed the menu")
+			}
+		}
+		entries, err := os.ReadDir(s.cfg.ReportDir)
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("failed collection wrote files: %v, %v", entries, err)
+		}
+		s.in = bufio.NewReader(strings.NewReader(exit))
+		if code := eseguiMenu(s); code != 3 {
+			t.Fatalf("exit code = %d, want 3", code)
+		}
+		if !strings.Contains(screen.String(), "Rifai la diagnosi") {
+			t.Fatal("missing recovery instructions")
+		}
+	}
+}
 
 func sessioneDiProva(l i18n.Lingua, schermo *bytes.Buffer) *sessione {
 	return &sessione{

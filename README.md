@@ -41,7 +41,7 @@ Single binary. No installer, no dependencies, no telemetry. Windows.
 Double-click opens an interactive menu; the offline graphical dashboard is one
 keystroke away.
 
-**[Download the latest release →](../../releases/latest)**
+**Local builds:** see [Windows compatibility and distribution](COMPATIBILITA.md).
 
 <br clear="left">
 
@@ -111,27 +111,30 @@ does it for them.
 
 ## Install
 
-Download `diskseer.exe` from [Releases](../../releases/latest) and run it.
-Nothing to install.
+Use the executable built from this local workspace. Nothing to install.
+Modern builds target Windows 10/11; separate legacy builds use Go 1.20.14 for
+Windows 7 SP1/8.1. See the [verified compatibility matrix](COMPATIBILITA.md)
+before choosing a binary; a successful cross-build is not a test on that OS.
 
 Windows will show *"Windows protected your PC"* because the binary is not code
 signed — click **More info → Run anyway**. Certificates cost a few hundred
 euros a year and this project has no budget for one.
 
-Or build it yourself:
+Build the local sources:
 
 ```
-git clone https://github.com/Shad272/diskseer.git
-cd diskseer
-go build -o diskseer.exe .
+powershell -NoProfile -ExecutionPolicy RemoteSigned -File tools/build.ps1 -Edition modern
 ```
 
-Go 1.21 or newer. No module dependencies — check `go.mod`, it is four lines.
+The source supports Go 1.20. Modern builds are validated with Go 1.27.1;
+Windows 7/8.1 builds must use Go 1.20.14. No module dependencies.
 
 ## Usage
 
-Double-click it: it asks for administrator rights, prints the diagnosis, and
-then hands you a menu instead of closing.
+Double-click it: it prefers a working Windows Terminal, falls back to a
+compatible shell, prints the diagnosis and offers a menu. Existing terminals,
+pipes and redirected output are preserved. Administrator rights are requested
+only through the explicit menu action.
 
 ```
  1  Live mode                    temperatures and free space, refreshed every 3s
@@ -141,15 +144,20 @@ then hands you a menu instead of closing.
  5  Export the data              anonymised JSON, safe to share
  6  Restart as administrator     needed to read SATA and USB drives
  7  Settings                     language, refresh rate, report details
- 8  Close diskseer
+ 0  Close diskseer
 ```
 
-Nothing is written to disk unless you ask for it. **Restart as administrator**
+Reports and exports are saved only on request. Terminal relaunch uses temporary
+handoff files, removed when the child exits. **Restart as administrator**
 appears only when the run is actually missing privileges, and **Export the data**
 is always anonymised — make, model and timestamps are removed, every
 measurement is kept — so a case can be shared without sharing a customer.
 
 Open the report and then go live, and the page keeps updating too.
+
+`--anonymous --menu` keeps machine details anonymised even after running the
+diagnosis again. If collection fails, repeat the diagnosis before opening,
+exporting or monitoring its results.
 
 ### Settings
 
@@ -213,6 +221,10 @@ diskseer --unicode           # the decorated characters, even in an unrecognised
 diskseer --gui               # write the report and open it in the browser
 diskseer --watch             # stay open and refresh the readings live
 diskseer --watch --gui       # live dashboard in the browser, live view in the terminal
+diskseer --direct            # keep this console, with no terminal relaunch
+diskseer --terminal cmd      # prefer cmd, falling back if it cannot start
+diskseer --profile conservative --workers 1
+diskseer --diagnostics       # capability/profile/discovery JSON, no disk inventory
 ```
 
 The GUI is fast by design: it is a self-contained local file, not an embedded
@@ -221,6 +233,11 @@ data anywhere, supports light/dark themes and finding filters, and can save a
 clean PDF from the **Print / save PDF** button. It is one entry away in the
 menu; terminal usage keeps the text output for scripts and remote support.
 
+Drive cards show diskseer's diagnostic status separately from Windows' generic
+health status. SMART and NVMe alarms take precedence; a drive without readable
+health counters is marked **unverified**. This also applies to the live view.
+The saved report directory is respected by both the menu and `--gui`.
+
 ### Watch mode
 
 `--watch` keeps diskseer running and re-reads the drives every few seconds
@@ -228,6 +245,12 @@ menu; terminal usage keeps the text output for scripts and remote support.
 place — temperatures, free space, per-drive health, finding counts — and if a
 report path is set, the HTML file is rewritten each cycle and the open page
 reloads itself, scroll position preserved.
+
+The selected finding filter is preserved too. File updates are staged in the
+destination directory before replacing the previous report; write errors are
+shown in the terminal. Stopping live mode with Ctrl+C saves a static report.
+Printing includes every finding, even when a screen filter is active, and pauses
+automatic refresh while the print dialog is open.
 
 The refresh is cheap on purpose. A full collection takes about three seconds
 because it starts PowerShell for the machine inventory; the values that
@@ -256,7 +279,7 @@ you are diagnosing — and prints to PDF without breaking cards across pages.
 hides SATA and USB drive health, and `diskseer` will tell you so rather than
 pretending the disk is fine.
 
-Exit codes: `0` clean, `1` warnings, `2` critical, `3` collection failed —
+Exit codes: `0` clean, `1` warnings, `2` critical, `3` collection or requested report save failed —
 useful for sweeping a fleet and surfacing only the machines that need work.
 
 ---
@@ -398,6 +421,19 @@ Both the `.ico` and the generated `.syso` are committed, so cloning and
 building gets you the icon without running either tool.
 
 ### Test data
+
+Run the checks locally with:
+
+```
+go test ./...
+go vet ./...
+node --test tools/report-ui.test.cjs
+```
+
+Node.js 22 or newer is used only for testing the report's embedded JavaScript;
+the shipped executable still has no runtime dependencies. The JavaScript tests
+exercise filters, denied browser storage and print/refresh coordination without
+a browser. Visual layout should also be checked in a browser before release.
 
 `testdata/` holds real captures run through `--anonymous`: manufacturer, model,
 CPU and drive names replaced, timestamps zeroed, **every measurement left

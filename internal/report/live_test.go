@@ -92,7 +92,7 @@ func TestLaTabellaDeiDischiRestaIncolonnata(t *testing.T) {
 
 			attesa := colonna(intestazione, l.S("HEALTH", "STATO"))
 			for _, r := range dischi {
-				stato := "ok"
+				stato := l.S("unverified", "non verificato")
 				if strings.Contains(r, l.S("wear", "usura")) {
 					stato = l.S("wear", "usura")
 				}

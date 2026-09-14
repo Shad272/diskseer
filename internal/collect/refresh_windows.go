@@ -3,10 +3,13 @@
 package collect
 
 import (
+	"context"
 	"syscall"
 	"unsafe"
 
 	"github.com/shad272/diskseer/internal/model"
+	"github.com/shad272/diskseer/internal/platform"
+	"github.com/shad272/diskseer/internal/tuning"
 )
 
 // Aggiornamento rapido dei soli valori che cambiano nel tempo.
@@ -22,6 +25,7 @@ import (
 
 var (
 	procGetDiskFreeSpaceExW = kernel32Refresh.NewProc("GetDiskFreeSpaceExW")
+	procGetDriveTypeW       = kernel32Refresh.NewProc("GetDriveTypeW")
 	kernel32Refresh         = syscall.NewLazyDLL("kernel32.dll")
 )
 
@@ -31,18 +35,36 @@ var (
 // chiama ha già in mano l'inventario, e ricostruirlo da zero significherebbe
 // pagare di nuovo i due secondi che stiamo cercando di evitare.
 func Refresh(s *model.Snapshot) {
-	aggiornaSpazioLibero(s)
+	p, _ := tuning.Select(platform.Detect(), "auto", 0)
+	_ = RefreshContext(context.Background(), s, p)
+}
+
+func RefreshContext(ctx context.Context, s *model.Snapshot, p tuning.Profile) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	aggiornaSpazioLibero(ctx, s)
 
 	// Le due letture dirette dei dischi rifanno tutto il lavoro, ma sono
 	// chiamate di sistema che costano microsecondi: non vale la pena
 	// distinguere quali campi siano cambiati.
-	for i := range s.Disks {
+	hdd := false
+	for _, d := range s.Disks {
+		if d.IsSystemDisk && (d.MediaType == "HDD" || d.MediaType == "Unspecified") {
+			hdd = true
+		}
+	}
+	current, _ := tuning.Select(platform.Detect(), p.Name, p.Workers)
+	parallel(ctx, len(s.Disks), current.DiskWorkers(len(s.Disks), hdd), func(i int) {
 		d := &s.Disks[i]
+		d.ReadError = ""
 		if d.BusType == "NVMe" {
 			if h, err := readNVMeHealth(d.DeviceID); err == nil {
 				aggiornaDaNVMe(d, h)
+			} else {
+				d.ReadError = "unavailable"
 			}
-			continue
+			return
 		}
 		sm, err := readSMART(d.DeviceID)
 		if err != nil {
@@ -50,10 +72,13 @@ func Refresh(s *model.Snapshot) {
 		}
 		if err == nil {
 			aggiornaDaSMART(d, sm)
+		} else {
+			d.ReadError = "unavailable"
 		}
-	}
+	})
 
 	Normalize(s)
+	return ctx.Err()
 }
 
 // aggiornaDaNVMe sovrascrive, mentre enrichNVMe riempiva solo i campi vuoti.
@@ -94,14 +119,27 @@ func aggiornaDaSMART(d *model.Disk, s *model.SMARTData) {
 // È l'unico dato di questo ciclo che cambia da un secondo all'altro per opera
 // dell'utente, ed è anche il più economico da leggere: una chiamata per
 // volume, senza processi da avviare né dispositivi da aprire.
-func aggiornaSpazioLibero(s *model.Snapshot) {
+func aggiornaSpazioLibero(ctx context.Context, s *model.Snapshot) {
 	for i := range s.Volumes {
+		if ctx.Err() != nil {
+			return
+		}
 		v := &s.Volumes[i]
+		v.ReadError = ""
 		if v.DriveLetter == "" {
+			continue
+		}
+		if len(v.DriveLetter) != 1 || !((v.DriveLetter[0] >= 'A' && v.DriveLetter[0] <= 'Z') || (v.DriveLetter[0] >= 'a' && v.DriveLetter[0] <= 'z')) {
+			v.ReadError = "unavailable"
 			continue
 		}
 		percorso, err := syscall.UTF16PtrFromString(v.DriveLetter + `:\`)
 		if err != nil {
+			continue
+		}
+		typeID, _, _ := procGetDriveTypeW.Call(uintptr(unsafe.Pointer(percorso)))
+		if typeID != 2 && typeID != 3 {
+			v.ReadError = "unavailable"
 			continue
 		}
 
@@ -117,6 +155,7 @@ func aggiornaSpazioLibero(s *model.Snapshot) {
 			uintptr(unsafe.Pointer(&libero)),
 		)
 		if r == 0 || totale == 0 {
+			v.ReadError = "unavailable"
 			// Volume rimosso o non pronto: si lasciano i valori precedenti
 			// invece di azzerarli, altrimenti le regole sullo spazio
 			// segnalerebbero un disco pieno che non esiste più.
