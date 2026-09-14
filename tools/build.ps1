@@ -21,11 +21,20 @@ try {
         if ($LASTEXITCODE -ne 0 -or $legacyVersion -notmatch 'go1\.20\.14 ') { throw 'Windows 7/8.1 builds must use Go 1.20.14, not a newer runtime.' }
         $lanes += @{Name='legacy'; Compiler=$LegacyGo; Architectures=@('amd64','386')}
     }
+    # Same names as the release page (.github/workflows/build.yml): the file name
+    # tells people which Windows it is for, and diskseer.exe is the default one.
+    $names = @{
+        'modern-amd64' = 'diskseer.exe'
+        'modern-386'   = 'diskseer-32bit.exe'
+        'modern-arm64' = 'diskseer-arm64.exe'
+        'legacy-amd64' = 'diskseer-windows7-8.exe'
+        'legacy-386'   = 'diskseer-windows7-8-32bit.exe'
+    }
     $checksums = @()
     foreach ($lane in $lanes) {
         foreach ($arch in $lane.Architectures) {
             $env:GOARCH=$arch
-            $name='diskseer-'+$lane.Name+'-'+$arch+'.exe'
+            $name=$names[$lane.Name+'-'+$arch]
             $output=Join-Path 'dist' $name
             & $lane.Compiler build -trimpath -buildvcs=false -ldflags '-s -w' -o $output .
             if ($LASTEXITCODE -ne 0) { throw ('Build failed: '+$name) }

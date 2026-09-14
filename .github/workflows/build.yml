@@ -14,12 +14,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # "file" is the name people see on the release page, so it says who the
+        # build is for. diskseer.exe is the one almost everyone needs: 64-bit
+        # Windows 10 and 11. The README download table uses the same names.
         include:
-          - {edition: modern, go: '1.27.1', arch: amd64}
-          - {edition: modern, go: '1.27.1', arch: '386'}
-          - {edition: modern, go: '1.27.1', arch: arm64}
-          - {edition: legacy, go: '1.20.14', arch: amd64}
-          - {edition: legacy, go: '1.20.14', arch: '386'}
+          - {edition: modern, go: '1.27.1', arch: amd64, file: 'diskseer.exe'}
+          - {edition: modern, go: '1.27.1', arch: '386', file: 'diskseer-32bit.exe'}
+          - {edition: modern, go: '1.27.1', arch: arm64, file: 'diskseer-arm64.exe'}
+          - {edition: legacy, go: '1.20.14', arch: amd64, file: 'diskseer-windows7-8.exe'}
+          - {edition: legacy, go: '1.20.14', arch: '386', file: 'diskseer-windows7-8-32bit.exe'}
     env:
       GOOS: windows
       GOARCH: ${{ matrix.arch }}
@@ -51,11 +54,11 @@ jobs:
           powershell.exe -NoProfile -File tools/test-probe.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           powershell.exe -NoProfile -File tools/test-terminal-discovery.ps1
-      - run: go build -trimpath -buildvcs=false -ldflags "-s -w" -o diskseer-${{ matrix.edition }}-${{ matrix.arch }}.exe .
+      - run: go build -trimpath -buildvcs=false -ldflags "-s -w" -o ${{ matrix.file }} .
       - uses: actions/upload-artifact@v4
         with:
           name: diskseer-${{ matrix.edition }}-${{ matrix.arch }}
-          path: diskseer-${{ matrix.edition }}-${{ matrix.arch }}.exe
+          path: ${{ matrix.file }}
   release:
     if: github.event_name == 'release'
     needs: test
