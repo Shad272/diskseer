@@ -20,6 +20,7 @@ const (
 	dim    = "\033[2m"
 	red    = "\033[31m"
 	yellow = "\033[33m"
+	orange = "\033[38;5;208m"
 	green  = "\033[32m"
 	blue   = "\033[36m"
 )
@@ -212,3 +213,22 @@ func wrap(s string, width int) []string {
 	}
 	return append(lines, cur)
 }
+
+// I colori, resi disponibili a chi disegna un'interfaccia fuori da questo
+// package — il menu interattivo vive nel package main ma deve avere lo stesso
+// aspetto del referto. Due tavolozze separate divergono alla prima modifica.
+const (
+	Bold   = bold
+	Dim    = dim
+	Red    = red
+	Yellow = yellow
+	Green  = green
+	Blue   = blue
+)
+
+// C applica un colore rispettando l'impostazione del Printer: se i colori sono
+// spenti restituisce il testo così com'è.
+func (p Printer) C(codice, s string) string { return p.c(codice, s) }
+
+// SevColor è il colore con cui questo programma rappresenta una gravità.
+func (p Printer) SevColor(s rules.Severity) string { return p.sevColor(s) }

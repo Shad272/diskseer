@@ -4,6 +4,7 @@ package collect
 
 import (
 	"fmt"
+	"strconv"
 	"syscall"
 )
 
@@ -47,6 +48,9 @@ func openDevice(path string, access uint32) (syscall.Handle, error) {
 // programma che gira su decine di macchine e dimentica maniglie aperte le
 // blocca finché non viene chiuso.
 func suDispositivo(deviceID string, fn func(syscall.Handle) error) error {
+	if _, err := strconv.ParseUint(deviceID, 10, 32); err != nil {
+		return fmt.Errorf("invalid physical drive number")
+	}
 	path := `\\.\PhysicalDrive` + deviceID
 
 	var ultimo error

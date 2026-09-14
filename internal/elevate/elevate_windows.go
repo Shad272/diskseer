@@ -95,10 +95,7 @@ func Richiedi(eseguibile string, argomenti []string) bool {
 func componiArgomenti(argomenti []string) string {
 	pezzi := make([]string, 0, len(argomenti))
 	for _, a := range argomenti {
-		if strings.ContainsAny(a, " \t") {
-			a = `"` + strings.ReplaceAll(a, `"`, `\"`) + `"`
-		}
-		pezzi = append(pezzi, a)
+		pezzi = append(pezzi, syscall.EscapeArg(a))
 	}
 	return strings.Join(pezzi, " ")
 }

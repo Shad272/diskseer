@@ -37,10 +37,11 @@ knows, and what to do about it.
     before considering replacing the drive.
 ```
 
-Single binary. No installer, no dependencies, no telemetry. Windows. Now with
-an offline graphical dashboard that opens automatically on double-click.
+Single binary. No installer, no dependencies, no telemetry. Windows.
+Double-click opens an interactive menu; the offline graphical dashboard is one
+keystroke away.
 
-**[Download the latest release →](../../releases/latest)**
+**Local builds:** see [Windows compatibility and distribution](COMPATIBILITA.md).
 
 <br clear="left">
 
@@ -110,46 +111,132 @@ does it for them.
 
 ## Install
 
-Download `diskseer.exe` from [Releases](../../releases/latest) and run it.
-Nothing to install.
+Use the executable built from this local workspace. Nothing to install.
+Modern builds target Windows 10/11; separate legacy builds use Go 1.20.14 for
+Windows 7 SP1/8.1. See the [verified compatibility matrix](COMPATIBILITA.md)
+before choosing a binary; a successful cross-build is not a test on that OS.
 
 Windows will show *"Windows protected your PC"* because the binary is not code
 signed — click **More info → Run anyway**. Certificates cost a few hundred
 euros a year and this project has no budget for one.
 
-Or build it yourself:
+Build the local sources:
 
 ```
-git clone https://github.com/Shad272/diskseer.git
-cd diskseer
-go build -o diskseer.exe .
+powershell -NoProfile -ExecutionPolicy RemoteSigned -File tools/build.ps1 -Edition modern
 ```
 
-Go 1.21 or newer. No module dependencies — check `go.mod`, it is four lines.
+The source supports Go 1.20. Modern builds are validated with Go 1.27.1;
+Windows 7/8.1 builds must use Go 1.20.14. No module dependencies.
 
 ## Usage
 
-Double-click it and it does the right thing: asks for administrator rights,
-saves the report next to the executable, and opens the graphical dashboard.
+Double-click it: it prefers a working Windows Terminal, falls back to a
+compatible shell, prints the diagnosis and offers a menu. Existing terminals,
+pipes and redirected output are preserved. Administrator rights are requested
+only through the explicit menu action.
 
-From a terminal:
+```
+ 1  Live mode                    temperatures and free space, refreshed every 3s
+ 2  Open the report              write an HTML report and open it in the browser
+ 3  Run the diagnosis again      re-read every drive from scratch
+ 4  Drive details                raw SMART and NVMe counters
+ 5  Export the data              anonymised JSON, safe to share
+ 6  Restart as administrator     needed to read SATA and USB drives
+ 7  Settings                     language, refresh rate, report details
+ 0  Close diskseer
+```
+
+Reports and exports are saved only on request. Terminal relaunch uses temporary
+handoff files, removed when the child exits. **Restart as administrator**
+appears only when the run is actually missing privileges, and **Export the data**
+is always anonymised — make, model and timestamps are removed, every
+measurement is kept — so a case can be shared without sharing a customer.
+
+Open the report and then go live, and the page keeps updating too.
+
+`--anonymous --menu` keeps machine details anonymised even after running the
+diagnosis again. If collection fails, repeat the diagnosis before opening,
+exporting or monitoring its results.
+
+### Settings
+
+Stored in `%APPDATA%\diskseer\settings.json`: language, refresh interval, the
+technician and customer details printed on reports, colours, symbols, and the
+folder reports are saved to. Options written on the command line always win for
+that run.
+
+Switching language applies immediately and then asks — in the language you just
+picked — whether it should become the default.
+
+### Old consoles
+
+Bullets, arrows, bars, the degree sign and the disc in the banner are drawn with
+characters some Windows consoles will not display — they come out as empty
+boxes, and `84 °C` becomes `84 ▫▫` on the one line you most need to read. This
+happens on a machine whose console reports a TrueType font and a UTF-8 code
+page, so neither of those is worth trusting.
+
+There is no way to ask a console which characters it can draw, so diskseer asks
+a question it *can* answer: does this terminal announce itself? Windows Terminal,
+ConEmu, an editor's built-in terminal and every Unix one set an environment
+variable saying they are there — and the ones that do, draw everything. The
+classic Windows console announces nothing, and there diskseer plays safe.
+
+The report stays identical in substance: `*` for bullets, `->` for actions, `#`
+for bars, `30C` for temperatures, and a disc drawn with `#` `-` `_` that is
+still a disc.
+
+```
+  +--------------------------+
+  |       _##########_       |
+  |     _##############_     |
+  |   _##################_   |   ___ ___ ___ _  _____ ___ ___ ___
+  |   ########/\##########   |  |   \_ _/ __| |/ / __| __| __| _ \
+  |   ##-----/  \#########   |  | |) | |\__ \ ' <\__ \ _|| _||   /
+  |   ##########\#########   |  |___/___|___/_|\_\___/___|___|_|_\
+  |   ###########\  /----#   |
+  |   ############\/######   |
+  |     -##############-     |
+  |       -##########-       |
+  +--------------------------+
+```
+
+Both directions are overridable, because the guess can be wrong either way:
+`--ascii` forces plain, `--unicode` forces the decorated characters, and
+**Settings → Symbols** cycles automatic / full / plain and remembers the choice.
+
+### From a terminal
+
+diskseer prints once and exits, so it stays usable inside scripts:
 
 ```
 diskseer                     # full report
 diskseer --lang it           # report in Italian
 diskseer --json              # raw data, for scripts
 diskseer --json --anonymous  # raw data with the machine identity stripped
-diskseer --gui               # open the interactive graphical dashboard
+diskseer --menu              # the interactive menu, without double-clicking
+diskseer --ascii             # plain characters, for consoles that cannot draw the rest
+diskseer --unicode           # the decorated characters, even in an unrecognised console
+diskseer --gui               # write the report and open it in the browser
 diskseer --watch             # stay open and refresh the readings live
 diskseer --watch --gui       # live dashboard in the browser, live view in the terminal
+diskseer --direct            # keep this console, with no terminal relaunch
+diskseer --terminal cmd      # prefer cmd, falling back if it cannot start
+diskseer --profile conservative --workers 1
+diskseer --diagnostics       # capability/profile/discovery JSON, no disk inventory
 ```
 
 The GUI is fast by design: it is a self-contained local file, not an embedded
 web server. It opens in the default browser, works without internet, sends no
 data anywhere, supports light/dark themes and finding filters, and can save a
-clean PDF from the **Print / save PDF** button. Double-clicking `diskseer.exe`
-launches this interface automatically; terminal usage keeps the text output
-for scripts and remote support.
+clean PDF from the **Print / save PDF** button. It is one entry away in the
+menu; terminal usage keeps the text output for scripts and remote support.
+
+Drive cards show diskseer's diagnostic status separately from Windows' generic
+health status. SMART and NVMe alarms take precedence; a drive without readable
+health counters is marked **unverified**. This also applies to the live view.
+The saved report directory is respected by both the menu and `--gui`.
 
 ### Watch mode
 
@@ -158,6 +245,12 @@ for scripts and remote support.
 place — temperatures, free space, per-drive health, finding counts — and if a
 report path is set, the HTML file is rewritten each cycle and the open page
 reloads itself, scroll position preserved.
+
+The selected finding filter is preserved too. File updates are staged in the
+destination directory before replacing the previous report; write errors are
+shown in the terminal. Stopping live mode with Ctrl+C saves a static report.
+Printing includes every finding, even when a screen filter is active, and pauses
+automatic refresh while the print dialog is open.
 
 The refresh is cheap on purpose. A full collection takes about three seconds
 because it starts PowerShell for the machine inventory; the values that
@@ -186,7 +279,7 @@ you are diagnosing — and prints to PDF without breaking cards across pages.
 hides SATA and USB drive health, and `diskseer` will tell you so rather than
 pretending the disk is fine.
 
-Exit codes: `0` clean, `1` warnings, `2` critical, `3` collection failed —
+Exit codes: `0` clean, `1` warnings, `2` critical, `3` collection or requested report save failed —
 useful for sweeping a fleet and surfacing only the machines that need work.
 
 ---
@@ -328,6 +421,19 @@ Both the `.ico` and the generated `.syso` are committed, so cloning and
 building gets you the icon without running either tool.
 
 ### Test data
+
+Run the checks locally with:
+
+```
+go test ./...
+go vet ./...
+node --test tools/report-ui.test.cjs
+```
+
+Node.js 22 or newer is used only for testing the report's embedded JavaScript;
+the shipped executable still has no runtime dependencies. The JavaScript tests
+exercise filters, denied browser storage and print/refresh coordination without
+a browser. Visual layout should also be checked in a browser before release.
 
 `testdata/` holds real captures run through `--anonymous`: manufacturer, model,
 CPU and drive names replaced, timestamps zeroed, **every measurement left

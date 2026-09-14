@@ -101,15 +101,21 @@ func leggiPaginaSalute(h syscall.Handle, deviceID string) (*model.NVMeHealth, er
 
 	// Windows dice dove ha messo i dati invece di darlo per scontato: si
 	// rilegge da lui, non si assume che sia dove l'abbiamo chiesto.
-	dataOffset := binary.LittleEndian.Uint32(buf[24:])
-	dataLength := binary.LittleEndian.Uint32(buf[28:])
-	start := int(sizeProtocolDataDescriptor - sizeProtocolSpecificData + dataOffset)
-	end := start + int(dataLength)
-	if dataLength < nvmeHealthLogSize || end > len(buf) {
-		return nil, fmt.Errorf("risposta NVMe incompleta da %s: %d byte", path, dataLength)
-	}
+	return parseNVMeResponse(buf, returned)
+}
 
-	return parseHealthLog(buf[start:end]), nil
+func parseNVMeResponse(buf []byte, returned uint32) (*model.NVMeHealth, error) {
+	if returned < sizeProtocolDataDescriptor || uint64(returned) > uint64(len(buf)) {
+		return nil, fmt.Errorf("incomplete NVMe descriptor")
+	}
+	offset := uint64(binary.LittleEndian.Uint32(buf[24:]))
+	length := uint64(binary.LittleEndian.Uint32(buf[28:]))
+	start := uint64(8) + offset
+	end := start + length
+	if offset < sizeProtocolSpecificData || length < nvmeHealthLogSize || end > uint64(returned) {
+		return nil, fmt.Errorf("invalid NVMe response bounds")
+	}
+	return parseHealthLog(buf[int(start):int(end)]), nil
 }
 
 // parseHealthLog legge i 512 byte della pagina di salute.

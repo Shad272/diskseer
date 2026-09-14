@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 	"html/template"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/shad272/diskseer/internal/i18n"
 	"github.com/shad272/diskseer/internal/model"
 	"github.com/shad272/diskseer/internal/rules"
+	"github.com/shad272/diskseer/internal/safefile"
 )
 
 //go:embed report.html.tmpl
@@ -82,6 +82,8 @@ type htmlDisk struct {
 	Capacita  string
 	Bus       string
 	Stato     string
+	StatoCSS  string
+	Windows   string
 	Temp      string
 	Vita      string
 	Scritti   string
@@ -126,6 +128,7 @@ type etichette struct {
 	Cliente                                    string
 	Panoramica, Problemi, Filtra, Tutti        string
 	Stampa, NessunProblema, Tema, Analisi      string
+	Critici, Avvisi, Evidenze, StatoWindows    string
 }
 
 func etichetteDi(l i18n.Lingua) etichette {
@@ -144,6 +147,10 @@ func etichetteDi(l i18n.Lingua) etichette {
 		ColCapacita:      l.S("Capacity", "Capacità"),
 		ColBus:           l.S("Connection", "Collegamento"),
 		ColStato:         l.S("Status", "Stato"),
+		StatoWindows:     l.S("Windows status", "Stato Windows"),
+		Critici:          l.S("Critical", "Critici"),
+		Avvisi:           l.S("Warning", "Avvisi"),
+		Evidenze:         l.S("Evidence", "Dati rilevati"),
 		ColTemp:          l.S("Temp.", "Temp."),
 		ColVita:          l.S("Life used", "Vita usata"),
 		ColScritti:       l.S("Written", "Scritti"),
@@ -162,8 +169,8 @@ func etichetteDi(l i18n.Lingua) etichette {
 		Sistema:          l.S("SYSTEM", "SISTEMA"),
 		NotaTitolo:       l.S("Partial analysis.", "Analisi parziale."),
 		NotaTesto: l.S(
-			"This check ran without administrator privileges: the internal health of the drives (S.M.A.R.T.), temperatures and wear levels were not accessible. A drive close to failure may have gone undetected.",
-			"Il controllo è stato eseguito senza privilegi di amministratore: lo stato di salute interno dei dischi (SMART), le temperature e i livelli di usura non erano accessibili. Un disco prossimo al guasto potrebbe non essere stato rilevato."),
+			"This check ran without administrator privileges. Some drive data may be unavailable; NVMe health can still be accessible. Review the findings and each drive's status before drawing conclusions.",
+			"Il controllo è stato eseguito senza privilegi di amministratore. Alcuni dati potrebbero non essere disponibili; lo stato NVMe può essere comunque accessibile. Consulta le segnalazioni e lo stato di ciascun disco prima di trarre conclusioni."),
 		Panoramica:     l.S("Overview", "Panoramica"),
 		Problemi:       l.S("Findings", "Segnalazioni"),
 		Filtra:         l.S("Filter findings", "Filtra segnalazioni"),
@@ -251,14 +258,17 @@ func scriviHTML(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Find
 		if d.NVMe != nil {
 			vita = fmt.Sprintf("%d%%", d.NVMe.PercentageUsedPct)
 			scritti = fmt.Sprintf("%.1f TB", d.NVMe.TerabyteScritti())
+		} else if d.WearPercent != nil {
+			vita = fmt.Sprintf("%d%%", *d.WearPercent)
 		}
 		temp := "—"
 		if d.TemperatureC != nil {
 			temp = fmt.Sprintf("%d °C", *d.TemperatureC)
 		}
+		stato, sev := statoDisco(d, l)
 		view.Disks = append(view.Disks, htmlDisk{
 			Tipo: tipo, Modello: d.Model, Capacita: gb(d.SizeBytes),
-			Bus: d.BusType, Stato: d.HealthStatus, Temp: temp,
+			Bus: d.BusType, Stato: stato, StatoCSS: sev.Slug(), Windows: d.HealthStatus, Temp: temp,
 			Vita: vita, Scritti: scritti,
 			DiSistema: d.IsSystemDisk,
 		})
@@ -268,6 +278,9 @@ func scriviHTML(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Find
 		stato := v.HealthStatus
 		if v.OperationalStatus != "" && v.OperationalStatus != "OK" {
 			stato = v.OperationalStatus
+		}
+		if v.ReadError != "" {
+			stato = l.S("not refreshed", "non aggiornato")
 		}
 		view.Volumes = append(view.Volumes, htmlVolume{
 			Lettera: v.DriveLetter, FS: v.FileSystem,
@@ -282,7 +295,7 @@ func scriviHTML(path string, l i18n.Lingua, snap model.Snapshot, fs []rules.Find
 	if err := parsedHTMLTemplate.Execute(&out, view); err != nil {
 		return fmt.Errorf("generazione referto: %w", err)
 	}
-	if err := os.WriteFile(path, out.Bytes(), 0o600); err != nil {
+	if err := safefile.Write(path, out.Bytes()); err != nil {
 		return fmt.Errorf("creazione referto: %w", err)
 	}
 	return nil

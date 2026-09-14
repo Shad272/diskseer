@@ -28,6 +28,8 @@ const (
 	pulisciDaQui    = "\033[J"
 	nascondiCursore = "\033[?25l"
 	mostraCursore   = "\033[?25h"
+	schermoLive     = "\033[?1049h"
+	schermoNormale  = "\033[?1049l"
 
 	maxVerdettiMostrati = 8
 	larghezzaBarra      = 20
@@ -46,6 +48,9 @@ type LiveOptions struct {
 	// Quando l'uscita è rediretta su file va invece lasciata scorrere: le
 	// sequenze di controllo finirebbero dentro il file come caratteri strani.
 	Ridisegna bool
+
+	// Zero uses the current visible console dimensions, re-read each frame.
+	Columns, Rows int
 }
 
 // PrepareLive prepara il terminale e restituisce la funzione che lo rimette
@@ -58,18 +63,20 @@ func PrepareLive(w io.Writer, ridisegna bool) func() {
 	if !ridisegna {
 		return func() {}
 	}
-	fmt.Fprint(w, nascondiCursore)
-	return func() { fmt.Fprint(w, mostraCursore) }
+	fmt.Fprint(w, schermoLive+nascondiCursore)
+	restored := false
+	return func() {
+		if !restored {
+			fmt.Fprint(w, mostraCursore+schermoNormale)
+			restored = true
+		}
+	}
 }
 
 // PrintLive disegna una schermata intera di stato.
 func (p Printer) PrintLive(snap model.Snapshot, fs []rules.Finding, opt LiveOptions) {
 	l := p.Lang
 	var b strings.Builder
-
-	if opt.Ridisegna {
-		b.WriteString(cursoreAOrigine)
-	}
 
 	p.liveIntestazione(&b, snap, opt)
 	p.liveEsito(&b, fs, opt.Elevato)
@@ -78,16 +85,33 @@ func (p Printer) PrintLive(snap model.Snapshot, fs []rules.Finding, opt LiveOpti
 	p.liveVerdetti(&b, fs)
 
 	b.WriteString("\n  ")
-	b.WriteString(p.c(dim, l.S("Ctrl+C to stop", "Ctrl+C per fermare")))
+	// Basta premerlo una volta: durante la vista dal vivo la modifica rapida
+	// della console è spenta, e quindi non c'è una selezione che possa
+	// intercettare il primo Ctrl+C. Vedi SospendiModificaRapida.
+	b.WriteString(p.c(dim, l.S("Press Ctrl+C to stop", "Premi Ctrl+C per fermare")))
 	b.WriteString("\n")
 
-	if opt.Ridisegna {
-		// Cancella ciò che restava della schermata precedente: senza,
-		// passando da un ciclo con sei verdetti a uno con quattro,
-		// resterebbero a schermo le due righe vecchie.
-		b.WriteString(pulisciDaQui)
+	if !opt.Ridisegna {
+		fmt.Fprint(p.W, b.String())
+		return
 	}
-	fmt.Fprint(p.W, b.String())
+	columns, rows := consoleDimensions()
+	if opt.Columns > 0 {
+		columns = opt.Columns
+	}
+	if opt.Rows > 0 {
+		rows = opt.Rows
+	}
+	w, content := p.W, b.String()
+	// Apply ASCII substitutions before measuring: an ellipsis becomes three
+	// cells, an arrow two. The usual output wrapper would expand them too late.
+	if plain, ok := w.(scrittorePiano); ok {
+		content = versionePiana.Replace(content)
+		w = plain.w
+	}
+	note := l.S("More rows: enlarge the window or open the full report",
+		"Altre righe: ingrandisci la finestra o apri il referto completo")
+	fmt.Fprint(w, liveFrame(content, columns, rows, note))
 }
 
 func (p Printer) liveIntestazione(b *strings.Builder, snap model.Snapshot, opt LiveOptions) {
@@ -129,9 +153,35 @@ func (p Printer) liveEsito(b *strings.Builder, fs []rules.Finding, elevato bool)
 	}
 }
 
+// Larghezze delle colonne della tabella dei dischi.
+//
+// Stanno in un posto solo perché intestazione e righe devono usare le stesse:
+// una colonna più larga in una delle due sposta a destra tutto quello che
+// viene dopo, e i valori finiscono sotto il titolo sbagliato.
+const (
+	colTipo     = 4
+	colBus      = 5
+	colModello  = 26
+	colCapacita = 10
+	colTemp     = 4
+	colOre      = 10
+)
+
 func (p Printer) liveDischi(b *strings.Builder, snap model.Snapshot) {
 	l := p.Lang
-	fmt.Fprintf(b, "\n  %s\n", p.c(bold, l.S("DRIVES", "DISCHI")))
+	fmt.Fprintf(b, "\n  %s  %s\n", p.c(bold, l.S("DRIVES", "DISCHI")),
+		p.c(dim, l.S("(▸ = the drive Windows starts from)", "(▸ = il disco da cui parte Windows)")))
+
+	// L'intestazione c'è perché senza i numeri della tabella sono solo numeri:
+	// "1962" accanto a un disco non dice da solo che sono ore di accensione.
+	fmt.Fprintf(b, "    %s\n", p.c(dim, fmt.Sprintf("%-*s %-*s %-*s %*s  %*s  %*s  %s",
+		colTipo, l.S("TYPE", "TIPO"),
+		colBus, "BUS",
+		colModello, l.S("MODEL", "MODELLO"),
+		colCapacita, l.S("SIZE", "CAPACITÀ"),
+		colTemp, "TEMP",
+		colOre, l.S("HOURS ON", "ORE ACCESO"),
+		l.S("HEALTH", "STATO"))))
 
 	for _, d := range snap.Disks {
 		segno := "  "
@@ -143,7 +193,7 @@ func (p Printer) liveDischi(b *strings.Builder, snap model.Snapshot) {
 			tipo = "?"
 		}
 
-		temp := p.c(dim, "  —  ")
+		temp := p.c(dim, fmt.Sprintf("%*s", colTemp, "—"))
 		if d.TemperatureC != nil {
 			t := *d.TemperatureC
 			colore := green
@@ -153,26 +203,51 @@ func (p Printer) liveDischi(b *strings.Builder, snap model.Snapshot) {
 			case t >= 50:
 				colore = yellow
 			}
-			temp = p.c(colore, fmt.Sprintf("%3d°C", t))
+			// La C senza il simbolo del grado. Il grado è l'unico carattere di
+			// questa tabella che la grafica semplice toglie invece di
+			// sostituire: la colonna delle temperature diventerebbe più corta
+			// di un carattere dell'intestazione, e tutto ciò che la segue
+			// scivolerebbe a sinistra.
+			temp = p.c(colore, fmt.Sprintf("%*s", colTemp, fmt.Sprintf("%dC", t)))
 		}
 
-		ore := p.c(dim, "     —")
+		ore := p.c(dim, fmt.Sprintf("%*s", colOre, "—"))
 		if d.PowerOnHours != nil {
-			ore = fmt.Sprintf("%6d", *d.PowerOnHours)
+			ore = fmt.Sprintf("%*d", colOre, *d.PowerOnHours)
 		}
 
-		fmt.Fprintf(b, "  %s%-4s %-5s %-26s %7.1f GB  %s  %s  %s\n",
-			segno, tipo, d.BusType, trunc(d.Model, 26),
-			float64(d.SizeBytes)/(1024*1024*1024), temp, ore, p.saluteDisco(d))
+		capacita := fmt.Sprintf("%.1f GB", float64(d.SizeBytes)/(1024*1024*1024))
+
+		fmt.Fprintf(b, "  %s%s %s %s %*s  %s  %s  %s\n",
+			segno, padCells(tipo, colTipo), padCells(d.BusType, colBus),
+			padCells(d.Model, colModello),
+			colCapacita, capacita, temp, ore, p.saluteDisco(d))
 	}
 }
 
-// saluteDisco riassume in poche parole lo stato del disco: la vita consumata
-// se il disco la dichiara, altrimenti il giudizio di Windows.
+// troncaColonna accorcia un testo a una larghezza fissa usando tre punti veri.
+//
+// Il troncamento del resto del programma usa il carattere dei puntini di
+// sospensione, che occupa una colonna. In grafica semplice diventa tre punti,
+// cioè due colonne in più: nella tabella il modello troncato spingeva a destra
+// capacità, temperatura e ore di quella riga soltanto. Qui si usano i tre
+// punti fin dall'inizio, così la larghezza è la stessa in entrambe le grafiche.
+func troncaColonna(s string, n int) string {
+	return fitCells(s, n)
+}
+
+// saluteDisco riassume in poche parole lo stato del disco: quanto è consumato,
+// se il disco lo dichiara, altrimenti il giudizio di Windows.
+//
+// Il consumo si chiama "usura", non "vita". È lo stesso numero che lo
+// standard NVMe chiama "percentuale usata", e parte da zero su un disco nuovo:
+// scritto "vita 1%" si leggeva come "gli resta l'1%", cioè il contrario, su un
+// disco praticamente nuovo.
 func (p Printer) saluteDisco(d model.Disk) string {
 	l := p.Lang
-	if d.NVMe != nil && d.NVMe.CriticalWarning != 0 {
-		return p.c(red, l.S("FAULT", "GUASTO"))
+	stato, sev := statoDisco(d, l)
+	if sev >= rules.SevWarn || d.ReadError != "" {
+		return p.c(p.sevColor(sev), stato)
 	}
 	if d.WearPercent != nil {
 		v := *d.WearPercent
@@ -183,12 +258,9 @@ func (p Printer) saluteDisco(d model.Disk) string {
 		case v >= 80:
 			colore = yellow
 		}
-		return p.c(colore, l.F("life %d%%", "vita %d%%", v))
+		return p.c(colore, l.F("wear %d%%", "usura %d%%", v))
 	}
-	if d.HealthStatus != "" && d.HealthStatus != "Healthy" {
-		return p.c(yellow, d.HealthStatus)
-	}
-	return p.c(green, "ok")
+	return p.c(p.sevColor(sev), stato)
 }
 
 func (p Printer) liveVolumi(b *strings.Builder, snap model.Snapshot) {
@@ -208,6 +280,9 @@ func (p Printer) liveVolumi(b *strings.Builder, snap model.Snapshot) {
 		nota := ""
 		if v.OperationalStatus != "" && v.OperationalStatus != "OK" {
 			nota = "  " + p.c(yellow, v.OperationalStatus)
+		}
+		if v.ReadError != "" {
+			nota += "  " + p.c(yellow, l.S("not refreshed", "non aggiornato"))
 		}
 
 		fmt.Fprintf(b, "    %s:  %-6s %s %s %s%s\n",
@@ -249,9 +324,9 @@ func (p Printer) liveVerdetti(b *strings.Builder, fs []rules.Finding) {
 					len(fs)-maxVerdettiMostrati)))
 			return
 		}
-		fmt.Fprintf(b, "  %s %-22s %s\n",
+		fmt.Fprintf(b, "  %s %s %s\n",
 			p.c(p.sevColor(f.Severity), "●"),
-			p.c(dim, trunc(f.Area+" · "+f.Target, 22)),
+			p.c(dim, padCells(f.Area+" · "+f.Target, 22)),
 			trunc(f.Title, 46))
 	}
 }

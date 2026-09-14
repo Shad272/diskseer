@@ -13,6 +13,7 @@ import (
 type Rule func(model.Snapshot, *builder)
 
 var registry = []Rule{
+	ruleCollectionNotes,
 	ruleSystemDiskIsHDD,
 	ruleDiskHealthStatus,
 	ruleDiskUncorrectedErrors,
