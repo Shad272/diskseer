@@ -39,16 +39,16 @@ jobs:
       - run: go vet ./...
       - if: matrix.arch != 'arm64'
         run: go test ./...
-      # Real shell relaunch: starts hidden cmd and PowerShell windows and waits
-      # for the child to confirm within a time limit. It depends on runner load
-      # and antivirus scanning, and failed once in its first sixteen runs, on a
-      # commit that passed on re-run. It runs on every pull request and every
-      # push to main; it is skipped when a release is published, because that
-      # commit was already verified and the release job only attaches files if
-      # every test passes: a timing hiccup would ship a release with nothing
-      # to download.
+      # Real shell relaunch: starts hidden cmd and PowerShell windows with a copy
+      # of the test binary and waits for the child to confirm. A cold PowerShell
+      # on a busy runner sometimes needed more than the program's 10-second
+      # limit, so the test allows each shell 30 seconds and the step timeout
+      # covers both. It runs on every pull request and every push to main, and
+      # is skipped when a release is published: that commit was already
+      # verified, and the release job only attaches files if every test passes,
+      # so a timing hiccup would ship a release with nothing to download.
       - if: matrix.arch != 'arm64' && github.event_name != 'release'
-        run: go test ./internal/terminal -run TestRealShell -count=1 -timeout=45s
+        run: go test ./internal/terminal -run TestRealShell -count=1 -timeout=120s
         env:
           DISKSEER_LAUNCH_TESTS: '1'
       - if: matrix.arch == 'amd64' && matrix.edition == 'modern'

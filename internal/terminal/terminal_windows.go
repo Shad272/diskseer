@@ -39,6 +39,13 @@ if(Get-Command Get-AppxPackage -ErrorAction SilentlyContinue){
  }
 }`
 
+// readinessTimeout bounds how long the parent waits for the relaunched child to
+// confirm it started. Past it, diskseer stays in the current console, and a
+// late child finds the request gone and exits without a second diagnosis. The
+// real shell handoff test raises it: it checks what the handoff preserves, not
+// how fast a cold PowerShell starts on a busy CI runner.
+var readinessTimeout = 10 * time.Second
+
 type limitedOutput struct{ bytes.Buffer }
 
 func (b *limitedOutput) Write(p []byte) (int, error) {
@@ -175,7 +182,7 @@ func launchExecutable(exe string, candidates []Candidate, args []string, own boo
 				kill()
 			}
 		}()
-		deadline := time.Now().Add(10 * time.Second)
+		deadline := time.Now().Add(readinessTimeout)
 		for time.Now().Before(deadline) {
 			if ready, err := os.ReadFile(filepath.Join(dir, "ready")); err == nil {
 				pid, err := strconv.Atoi(string(ready))
