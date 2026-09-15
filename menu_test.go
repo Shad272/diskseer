@@ -238,6 +238,34 @@ func TestLIntervalloHaIlPluraleGiusto(t *testing.T) {
 	}
 }
 
+// Le impostazioni si leggono in parole, non con i valori del file.
+//
+// "direct" e "auto" sono le chiavi che il programma salva; a schermo devono
+// diventare "questa finestra" e "Terminale di Windows, se c'è". Una sigla nel
+// menu è esattamente il tipo di cosa che costringe a indovinare.
+func TestIlTerminaleDiAvvioSiLeggeInParole(t *testing.T) {
+	for _, l := range []i18n.Lingua{i18n.EN, i18n.IT} {
+		var schermo bytes.Buffer
+		s := sessioneDiProva(l, &schermo)
+
+		if got, vuole := s.descriviTerminale(), l.S("this window", "questa finestra"); got != vuole {
+			t.Errorf("[%s] con le impostazioni predefinite il terminale si legge %q, atteso %q", l, got, vuole)
+		}
+		for _, valore := range terminaliDiAvvio {
+			s.cfg.Terminal = valore
+			if got := s.descriviTerminale(); got == valore {
+				t.Errorf("[%s] il valore %q compare a schermo così com'è nel file", l, valore)
+			}
+		}
+		for _, valore := range []string{"auto", "conservative", "balanced", "fast"} {
+			s.cfg.Profile = valore
+			if got := s.descriviProfilo(); got == valore && l == i18n.IT {
+				t.Errorf("[%s] il profilo %q compare a schermo così com'è nel file", l, valore)
+			}
+		}
+	}
+}
+
 func TestIndiceVoce(t *testing.T) {
 	casi := []struct {
 		scelta string

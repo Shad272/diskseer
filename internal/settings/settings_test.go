@@ -154,3 +154,34 @@ func TestInvalidFieldDoesNotApplyPartialConfiguration(t *testing.T) {
 		t.Fatalf("invalid settings were partially applied: %+v", got)
 	}
 }
+
+// Un diskseer appena installato resta nella finestra in cui si apre.
+//
+// Il rilancio in un altro terminale passa da una sequenza — PowerShell che
+// scorre le app installate, poi il programma che riapre se stesso — che
+// Bitdefender ha già messo in quarantena. Deve essere una scelta dell'utente,
+// non il comportamento di chiunque faccia doppio clic.
+//
+// Il secondo controllo copre chi ha un file di impostazioni salvato prima che
+// la chiave esistesse: la chiave assente deve lasciare il predefinito, non
+// tornare al rilancio.
+func TestIlTerminaleDiAvvioPredefinitoEQuestaFinestra(t *testing.T) {
+	if got := Predefinite().Terminal; got != TerminaleQuestaFinestra {
+		t.Errorf("terminale predefinito = %q, atteso %q", got, TerminaleQuestaFinestra)
+	}
+
+	cartellaFinta(t)
+	percorso, err := Percorso()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(percorso), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(percorso, []byte(`{"language":"it"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := Carica().Terminal; got != TerminaleQuestaFinestra {
+		t.Errorf("con un file senza la chiave terminal il terminale è %q, atteso %q", got, TerminaleQuestaFinestra)
+	}
+}

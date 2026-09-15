@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -39,6 +40,14 @@ func TestRealShellHandoffPreservesArgumentsDirectoryAndExit(t *testing.T) {
 	if os.Getenv("DISKSEER_LAUNCH_TESTS") == "" {
 		t.Skip("opt-in hidden native shell integration test")
 	}
+	// On GitHub runners the PowerShell case twice missed the program's 10-second
+	// readiness limit (launch=false after 10.01 s and 10.20 s) and passed on the
+	// next run in 4.4 s. The limit is right for a person waiting at a keyboard;
+	// this test is about arguments, directory and exit code surviving the
+	// handoff, so it allows a cold shell 30 seconds.
+	previous := readinessTimeout
+	readinessTimeout = 30 * time.Second
+	defer func() { readinessTimeout = previous }()
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)

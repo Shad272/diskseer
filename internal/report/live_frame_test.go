@@ -130,7 +130,7 @@ func TestLiveRedirectedOutputIsCompleteAndContainsNoCursorControls(t *testing.T)
 	var out bytes.Buffer
 	p := Printer{W: &out, Lang: i18n.EN}
 	p.PrintLive(dischiDiProva(), nil, LiveOptions{Columns: 8, Rows: 2})
-	if strings.Contains(out.String(), "\033") || !strings.Contains(out.String(), "TOSHIBA") || !strings.Contains(out.String(), "Muto") {
+	if strings.Contains(out.String(), "\033") || !strings.Contains(out.String(), "HDD SATA DI PROVA") || !strings.Contains(out.String(), "Muto") {
 		t.Fatal("redirected output was clipped or contains cursor controls")
 	}
 }

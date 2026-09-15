@@ -27,6 +27,9 @@ func TestSelectionMatrix(t *testing.T) {
 		{"Windows 7", platform.Capabilities{OS: "windows", Major: 6, Minor: 1, Console: true, InputConsole: true, OwnConsole: true}, Request{}, found, []string{"ps5", "cmd"}},
 		{"Windows 8.1", platform.Capabilities{OS: "windows", Major: 6, Minor: 3, Console: true, InputConsole: true, OwnConsole: true}, Request{}, found, []string{"ps5", "cmd"}},
 		{"direct", modern(), Request{Direct: true}, found, nil},
+		// Il predefinito salvato nelle impostazioni: nessun candidato anche con
+		// Terminale di Windows installato, quindi nessun rilancio.
+		{"saved preference: this window", modern(), Request{Preference: "direct"}, found, nil},
 		{"child prevents loop", modern(), Request{Child: true}, found, nil},
 		{"JSON/script", modern(), Request{NonInteractive: true}, found, nil},
 	}

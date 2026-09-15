@@ -18,15 +18,17 @@ func dischiDiProva() model.Snapshot {
 	return model.Snapshot{
 		Elevated: true,
 		Disks: []model.Disk{
-			{Model: "ASMT 2115", BusType: "USB", MediaType: "Unspecified",
+			// Modelli inventati: i dati di prova non descrivono il computer di
+			// nessuno, nemmeno quello su cui il difetto è stato visto.
+			{Model: "BOX USB DI PROVA", BusType: "USB", MediaType: "Unspecified",
 				SizeBytes: 500107862016, HealthStatus: "Healthy",
 				TemperatureC: puntInt(35), PowerOnHours: puntOre(307)},
-			{Model: "TOSHIBA MQ01ABF050", BusType: "SATA", MediaType: "HDD",
+			{Model: "HDD SATA DI PROVA", BusType: "SATA", MediaType: "HDD",
 				SizeBytes: 500107862016, HealthStatus: "Healthy",
 				TemperatureC: puntInt(28), PowerOnHours: puntOre(1962)},
 			// Un modello più lungo della sua colonna: è quello che veniva
 			// troncato con un carattere che la grafica semplice allarga.
-			{Model: "WD PC SN740 SDDQNQD-512G-1001", BusType: "NVMe", MediaType: "SSD",
+			{Model: "SSD NVME DI PROVA CON UN NOME MOLTO LUNGO", BusType: "NVMe", MediaType: "SSD",
 				SizeBytes: 512110190592, HealthStatus: "Healthy", IsSystemDisk: true,
 				TemperatureC: puntInt(29), PowerOnHours: puntOre(1574), WearPercent: puntInt(1)},
 			// Un disco senza letture, per i trattini al posto dei numeri.

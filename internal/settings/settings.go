@@ -53,10 +53,22 @@ type Config struct {
 }
 
 // Predefinite descrive un diskseer appena installato: inglese, tre secondi,
-// colori accesi.
+// colori accesi, e nessun rilancio in un altro terminale.
+//
+// Il rilancio resta disponibile ma va chiesto. Per trovare Terminale di Windows
+// il programma avvia PowerShell, scorre le app installate e poi riapre se
+// stesso in un'altra finestra: è una sequenza che gli antivirus guardano con
+// sospetto, e Bitdefender ne ha già messo in quarantena la verifica. Un
+// programma di diagnosi che l'antivirus di chi lo scarica cancella al primo
+// doppio clic non diagnostica niente. Chi vuole Terminale di Windows lo
+// sceglie dalle impostazioni sapendo cosa succede.
 func Predefinite() Config {
-	return Config{Language: "en", Interval: "3s", Colors: true, Symbols: SimboliAuto}
+	return Config{Language: "en", Interval: "3s", Colors: true, Symbols: SimboliAuto, Terminal: TerminaleQuestaFinestra}
 }
+
+// TerminaleQuestaFinestra è il valore di Terminal che tiene diskseer nella
+// finestra in cui è stato aperto.
+const TerminaleQuestaFinestra = "direct"
 
 // I tre valori di Symbols.
 const (

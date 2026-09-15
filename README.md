@@ -41,7 +41,7 @@ Single binary. No installer, no dependencies, no telemetry. Windows.
 Double-click opens an interactive menu; the offline graphical dashboard is one
 keystroke away.
 
-**Local builds:** see [Windows compatibility and distribution](COMPATIBILITA.md).
+**[Download the latest release →](../../releases/latest)**
 
 <br clear="left">
 
@@ -111,30 +111,58 @@ does it for them.
 
 ## Install
 
-Use the executable built from this local workspace. Nothing to install.
-Modern builds target Windows 10/11; separate legacy builds use Go 1.20.14 for
-Windows 7 SP1/8.1. See the [verified compatibility matrix](COMPATIBILITA.md)
-before choosing a binary; a successful cross-build is not a test on that OS.
+Download the file for your Windows from [Releases](../../releases/latest) and
+run it. Nothing to install.
+
+| Your Windows | File |
+|---|---|
+| Windows 10 or 11, 64-bit — almost everyone | `diskseer.exe` |
+| Windows 10 or 11, 32-bit | `diskseer-32bit.exe` |
+| Windows 11 on ARM | `diskseer-arm64.exe` |
+| Windows 7 SP1 or 8.1, 64-bit | `diskseer-windows7-8.exe` |
+| Windows 7 SP1 or 8.1, 32-bit | `diskseer-windows7-8-32bit.exe` |
+
+`SHA256SUMS.txt` lists the checksum of every file.
+
+The Windows 7 and 8.1 builds are compiled with Go 1.20.14, the last Go release
+that runs on those systems — and one that no longer receives security fixes.
+They pass the full test suite, but on Windows 11: **they have not been run on a
+real Windows 7 or 8.1 machine yet**, so reports from those systems are very
+welcome. On Windows 7 and 8, NVMe drives report less, because Windows only
+exposes their health log from Windows 10 onwards. The ARM64 build is
+cross-compiled and untested on ARM hardware. Only the 64-bit x86 builds carry
+the application icon.
 
 Windows will show *"Windows protected your PC"* because the binary is not code
 signed — click **More info → Run anyway**. Certificates cost a few hundred
 euros a year and this project has no budget for one.
 
-Build the local sources:
+Or build it yourself:
+
+```
+git clone https://github.com/Shad272/diskseer.git
+cd diskseer
+go build -o diskseer.exe .
+```
+
+Every release file, with the same names, in `dist/`:
 
 ```
 powershell -NoProfile -ExecutionPolicy RemoteSigned -File tools/build.ps1 -Edition modern
+powershell -NoProfile -ExecutionPolicy RemoteSigned -File tools/build.ps1 -Edition all -LegacyGo C:\path\to\go1.20.14\bin\go.exe
 ```
 
-The source supports Go 1.20. Modern builds are validated with Go 1.27.1;
-Windows 7/8.1 builds must use Go 1.20.14. No module dependencies.
+Releases are built with Go 1.27; the Windows 7 and 8.1 files require exactly
+Go 1.20.14, which the script checks and never downloads. No module
+dependencies.
 
 ## Usage
 
-Double-click it: it prefers a working Windows Terminal, falls back to a
-compatible shell, prints the diagnosis and offers a menu. Existing terminals,
-pipes and redirected output are preserved. Administrator rights are requested
-only through the explicit menu action.
+Double-click it: it asks for administrator rights — needed to read SATA and USB
+drives — prints the diagnosis, and then hands you a menu instead of closing. It
+stays in the window it opened in; if you prefer Windows Terminal, choose it in
+**Settings → Startup terminal**. Existing terminals, pipes and redirected output
+are left alone.
 
 ```
  1  Live mode                    temperatures and free space, refreshed every 3s
@@ -147,9 +175,9 @@ only through the explicit menu action.
  0  Close diskseer
 ```
 
-Reports and exports are saved only on request. Terminal relaunch uses temporary
-handoff files, removed when the child exits. **Restart as administrator**
-appears only when the run is actually missing privileges, and **Export the data**
+Reports and exports are saved only on request. **Restart as administrator**
+appears only when the run is actually missing privileges — for instance if the
+request was refused at startup — and **Export the data**
 is always anonymised — make, model and timestamps are removed, every
 measurement is kept — so a case can be shared without sharing a customer.
 
@@ -162,9 +190,16 @@ exporting or monitoring its results.
 ### Settings
 
 Stored in `%APPDATA%\diskseer\settings.json`: language, refresh interval, the
-technician and customer details printed on reports, colours, symbols, and the
-folder reports are saved to. Options written on the command line always win for
-that run.
+technician and customer details printed on reports, colours, symbols, the folder
+reports are saved to, the startup terminal and the performance profile. Options
+written on the command line always win for that run.
+
+**Startup terminal** is *this window* by default. *Automatic* reopens diskseer
+in Windows Terminal when it is installed. To find it, diskseer asks PowerShell
+for the list of installed apps and then starts itself again in a new window — a
+sequence some antivirus programs flag, which is why it only happens if you
+choose it. **Performance profile** decides how many drives are read at once;
+*automatic* picks it from the available memory and processors.
 
 Switching language applies immediately and then asks — in the language you just
 picked — whether it should become the default.
@@ -221,10 +256,10 @@ diskseer --unicode           # the decorated characters, even in an unrecognised
 diskseer --gui               # write the report and open it in the browser
 diskseer --watch             # stay open and refresh the readings live
 diskseer --watch --gui       # live dashboard in the browser, live view in the terminal
-diskseer --direct            # keep this console, with no terminal relaunch
-diskseer --terminal cmd      # prefer cmd, falling back if it cannot start
-diskseer --profile conservative --workers 1
-diskseer --diagnostics       # capability/profile/discovery JSON, no disk inventory
+diskseer --terminal auto     # reopen in Windows Terminal if installed (off by default)
+diskseer --direct            # never reopen in another terminal, whatever the settings say
+diskseer --profile conservative --workers 1   # read one drive at a time
+diskseer --diagnostics       # capability/profile/terminal JSON, no disk inventory
 ```
 
 The GUI is fast by design: it is a self-contained local file, not an embedded
